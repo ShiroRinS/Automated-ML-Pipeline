@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}System Status - ML Pipeline Dashboard{% endblock %}
+{% block page_title %}System Status{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- System Overview -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-server"></i> System Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Directory Status</h6>
+                        {% for dir_name, exists in status.directories.items() %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>{{ dir_name }}</span>
+                            {% if exists %}
+                                <span class="status-badge status-success">
+                                    <i class="fas fa-check"></i> Available
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-danger">
+                                    <i class="fas fa-times"></i> Missing
+                                </span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Key Files Status</h6>
+                        {% for file_name, exists in status.files.items() %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>{{ file_name }}</span>
+                            {% if exists %}
+                                <span class="status-badge status-success">
+                                    <i class="fas fa-check"></i> Available
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-danger">
+                                    <i class="fas fa-times"></i> Missing
+                                </span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-clock"></i> Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                {% if status.recent_activity %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for activity in status.recent_activity %}
+                                <tr>
+                                    <td>
+                                        {% if activity.type == 'Training' %}
+                                            <span class="badge bg-primary">
+                                                <i class="fas fa-cog"></i> {{ activity.type }}
+                                            </span>
+                                        {% elif activity.type == 'Prediction' %}
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-crystal-ball"></i> {{ activity.type }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                <i class="fas fa-info"></i> {{ activity.type }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ activity.description }}</td>
+                                    <td class="text-muted">
+                                        <i class="fas fa-clock"></i> {{ activity.timestamp }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-info-circle fa-2x mb-3"></i>
+                        <p>No recent activity found.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- System Health Summary -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-heartbeat"></i> System Health Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        {% set dir_count = status.directories.values() | list | select | list | length %}
+                        {% set total_dirs = status.directories | length %}
+                        <div class="metric-card card p-3 mb-3 
+                            {% if dir_count == total_dirs %}success{% else %}warning{% endif %}">
+                            <h3 class="mb-1">{{ dir_count }}/{{ total_dirs }}</h3>
+                            <small>Directories Available</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        {% set file_count = status.files.values() | list | select | list | length %}
+                        {% set total_files = status.files | length %}
+                        <div class="metric-card card p-3 mb-3 
+                            {% if file_count == total_files %}success{% else %}warning{% endif %}">
+                            <h3 class="mb-1">{{ file_count }}/{{ total_files }}</h3>
+                            <small>Key Files Available</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="metric-card card p-3 mb-3 primary">
+                            <h3 class="mb-1">{{ status.recent_activity | length }}</h3>
+                            <small>Recent Activities</small>
+                        </div>
+                    </div>
+                </div>
+                
+                {% set overall_health = (dir_count == total_dirs and file_count == total_files) %}
+                <div class="alert {% if overall_health %}alert-success{% else %}alert-warning{% endif %} mt-3">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-{% if overall_health %}check-circle{% else %}exclamation-triangle{% endif %}"></i>
+                        System Status: {% if overall_health %}Healthy{% else %}Attention Required{% endif %}
+                    </h6>
+                    {% if overall_health %}
+                        <p class="mb-0">All system components are functioning properly.</p>
+                    {% else %}
+                        <p class="mb-0">Some directories or files are missing. Please check the system configuration.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-refresh page every 30 seconds
+    setTimeout(function() {
+        location.reload();
+    }, 30000);
+</script>
+{% endblock %}

@@ -96,8 +96,9 @@ class MLTrainingPipeline:
             print("1. Use all features")
             print("2. Select specific features by number (e.g., 1,2,4,5)")
             print("3. Use recommended features (exclude high missing rate)")
+            print("4. Go back to main menu")
             
-            choice = input("Enter your choice (1-3): ").strip()
+            choice = input("Enter your choice (1-4): ").strip()
             
             if choice == "1":
                 self.selected_features = self.features.copy()
@@ -117,7 +118,11 @@ class MLTrainingPipeline:
                     if missing_pct < 10:
                         recommended.append(feature)
                 self.selected_features = recommended
+            elif choice == "4" or choice.lower() in ['back', 'b']:
+                print("↩️  Returning to main menu...")
+                return "go_back"
             else:
+                print("❌ Invalid choice. Using all features as default.")
                 self.selected_features = self.features.copy()
         else:
             # Use provided indices
@@ -316,7 +321,13 @@ class MLTrainingPipeline:
             self.analyze_features()
             
             # Step 3: Select features
-            self.select_features(feature_indices)
+            selection_result = self.select_features(feature_indices)
+            if selection_result == "go_back":
+                return {
+                    'success': False,
+                    'cancelled': True,
+                    'message': 'Training cancelled by user'
+                }
             
             # Step 4: Preprocess data
             X, y = self.preprocess_data()

@@ -35,7 +35,8 @@ class MLPipelineManager:
         print("3. 📊 View Training History")
         print("4. 🎯 Model Management")
         print("5. 📋 System Status")
-        print("6. ❌ Exit")
+        print("6. 🌐 Open Web Dashboard")
+        print("7. ❌ Exit")
         print("="*60)
         
     def run_training_pipeline(self):
@@ -56,6 +57,12 @@ class MLPipelineManager:
             result = pipeline.run_training_pipeline()
             
             os.chdir(original_dir)
+            
+            # Handle cancelled training
+            if result.get('cancelled', False):
+                print("\n🔄 Training cancelled - returning to main menu")
+                return True  # Return True to avoid error message
+            
             return result['success']
             
         except Exception as e:
@@ -145,13 +152,25 @@ class MLPipelineManager:
         print("3. Delete old models")
         print("4. Back to main menu")
         
-        choice = input("Enter your choice: ").strip()
-        if choice == "1":
-            self._view_model_details(model_files)
-        elif choice == "2":
-            print("Note: Prediction pipeline automatically uses the latest model")
-        elif choice == "3":
-            print("Model deletion feature not implemented yet")
+        while True:
+            choice = input("\nEnter your choice (1-4): ").strip()
+            
+            if choice == "1":
+                self._view_model_details(model_files)
+                input("\nPress Enter to continue...")
+            elif choice == "2":
+                print("\n💡 Note: Prediction pipeline automatically uses the latest model")
+                print("The most recently trained model is always used for predictions.")
+                input("\nPress Enter to continue...")
+            elif choice == "3":
+                print("\n🚧 Model deletion feature coming soon!")
+                print("For now, you can manually delete files from the artifacts directory.")
+                input("\nPress Enter to continue...")
+            elif choice == "4" or choice.lower() in ['back', 'b']:
+                print("↩️  Returning to main menu...")
+                break
+            else:
+                print("❌ Invalid choice. Please try again.")
         
     def _view_model_details(self, model_files):
         """View detailed information about a specific model"""
@@ -236,11 +255,96 @@ class MLPipelineManager:
             else:
                 print("Latest Prediction: None")
     
+    def open_web_dashboard(self):
+        """Open the web dashboard in browser"""
+        import webbrowser
+        import subprocess
+        import time
+        import platform
+        
+        print("\n🌐 Starting Web Dashboard...")
+        print("📊 Dashboard URL: http://localhost:5000")
+        
+        web_app_path = self.base_dir / "web_ui" / "app.py"
+        
+        if not web_app_path.exists():
+            print("❌ Web UI not found. Please ensure web_ui/app.py exists.")
+            return
+        
+        try:
+            print("🚀 Starting Flask server in new terminal...")
+            
+            # Get the absolute path to the web app
+            abs_web_app_path = web_app_path.resolve()
+            
+            # Detect OS and open terminal accordingly
+            system = platform.system().lower()
+            
+            if system == "windows":
+                # For Windows - open PowerShell in new window
+                cmd = f'start powershell -Command "cd \"{self.base_dir.resolve()}\"; python web_ui/app.py"'
+                subprocess.run(cmd, shell=True)
+                print("✅ New PowerShell window opened with Flask server!")
+                
+            elif system == "darwin":  # macOS
+                # For macOS - open Terminal in new window
+                script = f'tell app "Terminal" to do script "cd {self.base_dir.resolve()} && python web_ui/app.py"'
+                subprocess.run(["osascript", "-e", script])
+                print("✅ New Terminal window opened with Flask server!")
+                
+            elif system == "linux":
+                # For Linux - try common terminal emulators
+                terminals = ["gnome-terminal", "konsole", "xterm", "terminator"]
+                
+                for terminal in terminals:
+                    try:
+                        if terminal == "gnome-terminal":
+                            subprocess.run([terminal, "--", "bash", "-c", f"cd {self.base_dir.resolve()} && python web_ui/app.py; exec bash"])
+                        else:
+                            subprocess.run([terminal, "-e", f"bash -c 'cd {self.base_dir.resolve()} && python web_ui/app.py; exec bash'"])
+                        print(f"✅ New {terminal} window opened with Flask server!")
+                        break
+                    except FileNotFoundError:
+                        continue
+                else:
+                    print("❌ No suitable terminal emulator found.")
+                    raise Exception("Terminal not found")
+            
+            # Wait a moment for server to start
+            print("⏳ Waiting for Flask server to start...")
+            time.sleep(3)
+            
+            # Open browser
+            print("🌐 Opening browser...")
+            webbrowser.open('http://localhost:5000')
+            print("\n✅ Dashboard should now be available in your browser!")
+            print("📊 URL: http://localhost:5000")
+            
+            print("\n💡 Tips:")
+            print("   • The Flask server will run in the new terminal window")
+            print("   • Close the terminal window to stop the server")
+            print("   • Refresh your browser if the page doesn't load immediately")
+            
+        except Exception as e:
+            print(f"❌ Failed to automatically start server: {str(e)}")
+            print("\n🔧 Manual fallback:")
+            print("   1. Open a new terminal window")
+            print(f"   2. Navigate to: {self.base_dir.resolve()}")
+            print("   3. Run: python web_ui/app.py")
+            print("   4. Open http://localhost:5000 in your browser")
+            
+            # Still try to open browser
+            try:
+                webbrowser.open('http://localhost:5000')
+                print("\n🌐 Browser opened - start the server manually to access dashboard")
+            except:
+                pass
+    
     def run(self):
         """Main interface loop"""
         while True:
             self.show_main_menu()
-            choice = input("Enter your choice (1-6): ").strip()
+            choice = input("Enter your choice (1-7): ").strip()
             
             if choice == "1":
                 self.run_training_pipeline()
@@ -253,6 +357,8 @@ class MLPipelineManager:
             elif choice == "5":
                 self.show_system_status()
             elif choice == "6":
+                self.open_web_dashboard()
+            elif choice == "7":
                 print("👋 Goodbye!")
                 break
             else:
