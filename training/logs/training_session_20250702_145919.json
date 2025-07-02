@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-07-02T14:59:19.601549",
+  "training_id": "20250702_145919",
+  "data_path": "data/raw_data.csv",
+  "features_used": [
+    "Pclass",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Fare",
+    "Embarked"
+  ],
+  "n_features": 7,
+  "target_variable": "Survived",
+  "train_size": 712,
+  "test_size": 179,
+  "total_data_size": 891,
+  "train_score": 0.9817415730337079,
+  "test_score": 0.8268156424581006,
+  "cv_mean": 0.7992711513838274,
+  "cv_std": 0.038214810813971656,
+  "model_path": "artifacts\\model_20250702_145919.pkl",
+  "scaler_path": "artifacts\\scaler_20250702_145919.pkl",
+  "features_path": "artifacts\\features_20250702_145919.json",
+  "is_active": true,
+  "notes": "Training completed successfully with 7 features"
+}

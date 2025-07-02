@@ -1,0 +1,23 @@
+{
+  "training_id": "20250702_145919",
+  "selected_features": [
+    "Pclass",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Fare",
+    "Embarked"
+  ],
+  "n_features": 7,
+  "target_variable": "Survived",
+  "training_date": "2025-07-02T14:59:19.600554",
+  "data_shape": [
+    891,
+    8
+  ],
+  "train_size": 712,
+  "test_size": 179,
+  "model_type": "RandomForestClassifier",
+  "scaler_type": "StandardScaler"
+}

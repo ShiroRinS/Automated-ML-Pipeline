@@ -1,0 +1,2 @@
+timestamp,training_id,n_features,features_list,train_size,test_size,train_score,test_score,cv_mean,cv_std,model_path,scaler_path,is_active
+2025-07-02T14:59:19.601549,20250702_145919,7,"Pclass,Sex,Age,SibSp,Parch,Fare,Embarked",712,179,0.9817415730337079,0.8268156424581006,0.7992711513838274,0.038214810813971656,artifacts\model_20250702_145919.pkl,artifacts\scaler_20250702_145919.pkl,True
