@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="row">
+                <div class="col-12 col-md-6 col-lg-3 my-3">
+                    <div class="card metric-card primary">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5>Total Models</h5>
+                                    <h2>{{ stats.total_models }}</h2>
+                                </div>
+                                <i class="fas fa-cogs fa-3x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-lg-3 my-3">
+                    <div class="card metric-card success">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5>Total Predictions</h5>
+                                    <h2>{{ stats.total_predictions }}</h2>
+                                </div>
+                                <i class="fas fa-chart-line fa-3x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-lg-3 my-3">
+                    <div class="card metric-card warning">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5>Training Sessions</h5>
+                                    <h2>{{ stats.training_sessions }}</h2>
+                                </div>
+                                <i class="fas fa-history fa-3x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-lg-3 my-3">
+                    <div class="card metric-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5>Best Score</h5>
+                                    <h2>{{ stats.best_score }}</h2>
+                                </div>
+                                <i class="fas fa-trophy fa-3x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card table-container">
+                        <div class="card-header">
+                            <h4>Recent Activity</h4>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Timestamp</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for activity in stats.recent_activity %}
+                                    <tr>
+                                        <td>{{ activity.type }}</td>
+                                        <td>{{ activity.description }}</td>
+                                        <td>{{ activity.timestamp }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

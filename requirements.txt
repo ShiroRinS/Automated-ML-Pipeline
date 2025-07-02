@@ -1,4 +1,6 @@
 pandas
 numpy
 scikit-learn
+flask
+jinja2
 

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block page_title %}Prediction: {{ filename }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3><i class="fas fa-file-csv"></i> {{ filename }}</h3>
+            <a href="/download/prediction/{{ filename }}" class="btn btn-primary">
+                <i class="fas fa-download"></i> Download CSV
+            </a>
+        </div>
+
+        {% if summary %}
+        <div class="prediction-summary mb-4">
+            <div class="row">
+                <div class="col-md-3 text-center">
+                    <h4>{{ summary.total_predictions }}</h4>
+                    <small>Total Predictions</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <h4>{{ summary.survived }}</h4>
+                    <small>Survived</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <h4>{{ summary.not_survived }}</h4>
+                    <small>Did Not Survive</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <h4>{{ summary.survival_rate }}</h4>
+                    <small>Survival Rate</small>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card table-container">
+            <div class="card-header">
+                <h5><i class="fas fa-table"></i> Prediction Results</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    {% for table in tables %}
+                        {{ table|safe }}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <a href="/predictions" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Predictions
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
