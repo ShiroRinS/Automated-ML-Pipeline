@@ -1,10 +1,13 @@
 {
   "feature_names": [
-    "feature1",
-    "feature2",
-    "feature3",
-    "feature4"
+    "Pclass",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Fare",
+    "Embarked"
   ],
-  "n_features": 4,
+  "n_features": 7,
   "training_date": "20250702"
 }

@@ -4,3 +4,7 @@ timestamp,message,accuracy
 2025-07-02 14:07:42,"Data loaded: 10 rows, 5 columns",
 2025-07-02 14:07:42,Model trained successfully,0.5
 2025-07-02 14:07:42,Artifacts saved with date: 20250702,
+2025-07-02 14:33:58,Training started,
+2025-07-02 14:33:58,"Data loaded: 891 rows, 8 columns",
+2025-07-02 14:33:58,Model trained successfully,0.8212290502793296
+2025-07-02 14:33:58,Artifacts saved with date: 20250702,
