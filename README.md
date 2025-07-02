@@ -1,5 +1,7 @@
 # Automated ML Pipeline
 
+Automated Pipeline to help AI engineer life dealing with basic process easier.
+
 A quick prototype for an automated machine learning pipeline with training and prediction components.
 
 ## Project Structure
