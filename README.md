@@ -90,4 +90,4 @@ This will:
 
 ## License
 
-This project is open source and available under the MIT License.
+This project is proprietary and not open source.
