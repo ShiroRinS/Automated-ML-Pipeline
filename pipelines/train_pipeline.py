@@ -18,7 +18,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class MLTrainingPipeline:
-    def __init__(self, data_path="data/raw_data.csv", artifacts_dir="artifacts", logs_dir="logs"):
+    def __init__(self, data_path="training/data/titanic.csv", artifacts_dir="training/artifacts", logs_dir="training/logs"):
         self.data_path = data_path
         self.artifacts_dir = Path(artifacts_dir)
         self.logs_dir = Path(logs_dir)
