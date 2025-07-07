@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Training Detail - {{ training_id }} - ML Pipeline Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-microscope"></i> Training Session Details</h2>
+                <a href="{{ url_for('training_history') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to History
+                </a>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">
+                                <i class="fas fa-info-circle"></i> Session Information
+                                <small class="text-muted">{{ training_id }}</small>
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for key, value in details.items() %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="border-start border-primary border-3 ps-3">
+                                        <strong class="text-primary">{{ key }}:</strong><br>
+                                        {% if key == 'Feature List' %}
+                                            <div class="mt-1">
+                                                {% for feature in value.split(', ') %}
+                                                    <span class="badge bg-secondary me-1 mb-1">{{ feature }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        {% elif key in ['Training Score', 'Test Score', 'CV Mean', 'CV Std'] %}
+                                            <span class="badge bg-success fs-6">{{ value }}</span>
+                                        {% elif key == 'Is Active' %}
+                                            {% if value == 'Yes' %}
+                                                <span class="badge bg-success">{{ value }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ value }}</span>
+                                            {% endif %}
+                                        {% elif 'Path' in key %}
+                                            <code class="text-muted">{{ value }}</code>
+                                        {% else %}
+                                            <span class="text-dark">{{ value }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-chart-line"></i> Performance Summary
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>Training Score:</span>
+                                    <strong class="text-success">{{ details['Training Score'] }}</strong>
+                                </div>
+                                <div class="progress mt-1" style="height: 8px;">
+                                    <div class="progress-bar bg-success" style="width: {{ (details['Training Score']|float * 100)|round(1) }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>Test Score:</span>
+                                    <strong class="text-primary">{{ details['Test Score'] }}</strong>
+                                </div>
+                                <div class="progress mt-1" style="height: 8px;">
+                                    <div class="progress-bar bg-primary" style="width: {{ (details['Test Score']|float * 100)|round(1) }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>CV Mean:</span>
+                                    <strong class="text-info">{{ details['CV Mean'] }}</strong>
+                                </div>
+                                <div class="progress mt-1" style="height: 8px;">
+                                    <div class="progress-bar bg-info" style="width: {{ (details['CV Mean']|float * 100)|round(1) }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <div class="text-center">
+                                <h5 class="text-muted">Data Split</h5>
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <div class="border-end">
+                                            <h4 class="text-primary mb-0">{{ details['Training Size'] }}</h4>
+                                            <small class="text-muted">Train</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <h4 class="text-success mb-0">{{ details['Test Size'] }}</h4>
+                                        <small class="text-muted">Test</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-download"></i> Model Files
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group list-group-flush">
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-robot text-primary"></i>
+                                        <span class="ms-2">Model</span>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">PKL</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-balance-scale text-info"></i>
+                                        <span class="ms-2">Scaler</span>
+                                    </div>
+                                    <span class="badge bg-info rounded-pill">PKL</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-list text-success"></i>
+                                        <span class="ms-2">Features</span>
+                                    </div>
+                                    <span class="badge bg-success rounded-pill">JSON</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if raw_details %}
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-code"></i> Raw Session Data
+                                <small class="text-muted">(JSON Format)</small>
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 rounded"><code>{{ raw_details | tojson(indent=2) }}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
