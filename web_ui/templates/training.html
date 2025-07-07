@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Train New Model</h2>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Feature Selection</h5>
+                    <div id="featureList" class="mb-4">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="sr-only">Loading...</span>
+                            </div>
+                            <p>Loading available features...</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button class="btn btn-secondary" id="selectAll">Select All</button>
+                        <button class="btn btn-secondary" id="deselectAll">Deselect All</button>
+                        <button class="btn btn-info" id="selectRecommended">Use Recommended</button>
+                    </div>
+                    
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-info-circle"></i>
+                        Selected features: <span id="selectedCount">0</span>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="startTraining" disabled>
+                        Start Training
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Training Status</h5>
+                    <div id="trainingStatus">
+                        <div class="alert alert-secondary">
+                            Waiting to start training...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feature Detail Modal -->
+<div class="modal fade" id="featureDetailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Feature Details</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table class="table">
+                    <tbody id="featureDetailContent">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    let features = [];
+    let selectedFeatures = new Set();
+    
+    // Load available features
+    $.get('/training/features', function(response) {
+        if (response.success) {
+            features = response.features;
+            renderFeatures(features);
+        } else {
+            $('#featureList').html(
+                '<div class="alert alert-danger">' +
+                'Failed to load features: ' + response.error +
+                '</div>'
+            );
+        }
+    });
+    
+    function renderFeatures(features) {
+        const container = $('#featureList');
+        container.empty();
+        
+        features.forEach(feature => {
+            const row = $('<div class="feature-row mb-2 p-2 border rounded">').append(
+                $('<div class="form-check">').append(
+                    $('<input>')
+                        .addClass('form-check-input feature-checkbox')
+                        .attr({
+                            type: 'checkbox',
+                            id: `feature-${feature.index}`,
+                            'data-index': feature.index
+                        })
+                )
+                .append(
+                    $('<label>')
+                        .addClass('form-check-label')
+                        .attr('for', `feature-${feature.index}`)
+                        .text(feature.name)
+                )
+                .append(
+                    $('<button>')
+                        .addClass('btn btn-sm btn-info ml-2 view-details')
+                        .attr('data-index', feature.index)
+                        .html('<i class="fas fa-info-circle"></i>')
+                )
+            );
+            
+            container.append(row);
+        });
+        
+        updateSelectedCount();
+    }
+    
+    // Feature selection handlers
+    $(document).on('change', '.feature-checkbox', function() {
+        const index = $(this).data('index');
+        if (this.checked) {
+            selectedFeatures.add(index);
+        } else {
+            selectedFeatures.delete(index);
+        }
+        updateSelectedCount();
+    });
+    
+    $('#selectAll').click(function() {
+        $('.feature-checkbox').prop('checked', true).trigger('change');
+    });
+    
+    $('#deselectAll').click(function() {
+        $('.feature-checkbox').prop('checked', false).trigger('change');
+    });
+    
+    $('#selectRecommended').click(function() {
+        $('.feature-checkbox').each(function() {
+            const index = $(this).data('index');
+            const feature = features.find(f => f.index === index);
+            // Select features with < 10% missing values
+            const shouldSelect = feature.missing_pct < 10;
+            $(this).prop('checked', shouldSelect).trigger('change');
+        });
+    });
+    
+    // View feature details
+    $(document).on('click', '.view-details', function() {
+        const index = $(this).data('index');
+        const feature = features.find(f => f.index === index);
+        
+        const content = $('#featureDetailContent');
+        content.empty();
+        
+        Object.entries(feature).forEach(([key, value]) => {
+            if (key !== 'index') {
+                content.append(
+                    $('<tr>').append(
+                        $('<th>').text(key.replace('_', ' ').toUpperCase()),
+                        $('<td>').text(value)
+                    )
+                );
+            }
+        });
+        
+        $('#featureDetailModal').modal('show');
+    });
+    
+    function updateSelectedCount() {
+        const count = selectedFeatures.size;
+        $('#selectedCount').text(count);
+        $('#startTraining').prop('disabled', count === 0);
+    }
+    
+    // Start training
+    $('#startTraining').click(function() {
+        const button = $(this);
+        const status = $('#trainingStatus');
+        
+        button.prop('disabled', true);
+        status.html(
+            '<div class="alert alert-info">' +
+            '<div class="spinner-border spinner-border-sm" role="status"></div> ' +
+            'Training in progress...' +
+            '</div>'
+        );
+        
+        $.ajax({
+            url: '/training/start',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                features: Array.from(selectedFeatures)
+            }),
+            success: function(response) {
+                if (response.success) {
+                    const result = response.result;
+                    status.html(
+                        '<div class="alert alert-success">' +
+                        '<h6>Training Complete!</h6>' +
+                        `<p>Training ID: ${result.training_id}</p>` +
+                        `<p>Test Score: ${result.results.test_score.toFixed(4)}</p>` +
+                        `<p>CV Score: ${result.results.cv_mean.toFixed(4)}</p>` +
+                        '<a href="/training-detail/' + result.training_id + '" class="btn btn-info btn-sm">View Details</a>' +
+                        '</div>'
+                    );
+                } else {
+                    status.html(
+                        '<div class="alert alert-danger">' +
+                        'Training failed: ' + response.error +
+                        '</div>'
+                    );
+                }
+                button.prop('disabled', false);
+            },
+            error: function(xhr) {
+                status.html(
+                    '<div class="alert alert-danger">' +
+                    'Training failed: ' + (xhr.responseJSON?.error || 'Unknown error') +
+                    '</div>'
+                );
+                button.prop('disabled', false);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

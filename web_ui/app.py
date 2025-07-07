@@ -32,6 +32,14 @@ def index():
     except Exception as e:
         return render_template('error.html', error=str(e))
 
+@app.route('/train')
+def train_model():
+    """Train new model with feature selection"""
+    try:
+        return render_template('training.html')
+    except Exception as e:
+        return render_template('error.html', error=str(e))
+
 @app.route('/predictions')
 def predictions():
     """View all prediction results"""
@@ -205,6 +213,44 @@ def download_prediction(filename):
         return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
     except Exception as e:
         return render_template('error.html', error=str(e))
+
+@app.route('/training/features')
+def get_available_features():
+    """Get available features from training data"""
+    try:
+        from pipelines.train_pipeline import MLTrainingPipeline
+        pipeline = MLTrainingPipeline()
+        pipeline.load_data()
+        feature_info = pipeline.analyze_features()
+        return jsonify({
+            'success': True,
+            'features': feature_info
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/training/start', methods=['POST'])
+def start_training():
+    """Start training with selected features"""
+    try:
+        feature_indices = request.json.get('features', [])
+        
+        from pipelines.train_pipeline import MLTrainingPipeline
+        pipeline = MLTrainingPipeline()
+        result = pipeline.run_training_pipeline(feature_indices=feature_indices)
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 def get_system_stats():
     """Get system statistics for dashboard"""
