@@ -80,18 +80,49 @@ $(document).ready(function() {
     let selectedFeatures = new Set();
     
     // Load available features
-    $.get('/training/features', function(response) {
-        if (response.success) {
-            features = response.features;
-            renderFeatures(features);
-        } else {
-            $('#featureList').html(
-                '<div class="alert alert-danger">' +
-                'Failed to load features: ' + response.error +
-                '</div>'
-            );
-        }
-    });
+    function loadFeatures() {
+        $('#featureList').html(`
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+                <p class="mt-2">Loading available features...</p>
+            </div>
+        `);
+        
+        $.ajax({
+            url: '/training/features',
+            method: 'GET',
+            timeout: 10000,  // 10 second timeout
+            success: function(response) {
+                if (response.success) {
+                    features = response.features;
+                    renderFeatures(features);
+                } else {
+                    showError('Failed to load features: ' + response.error);
+                }
+            },
+            error: function(xhr, status, error) {
+                if (status === 'timeout') {
+                    showError('Loading features timed out. Please try refreshing the page.');
+                } else {
+                    showError('Failed to load features: ' + (error || 'Unknown error'));
+                }
+            }
+        });
+    }
+    
+    function showError(message) {
+        $('#featureList').html(`
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle"></i> ${message}
+                <button class="btn btn-outline-danger btn-sm ml-3" onclick="loadFeatures()">Retry</button>
+            </div>
+        `);
+    }
+    
+    // Initial load
+    loadFeatures();
     
     function renderFeatures(features) {
         const container = $('#featureList');

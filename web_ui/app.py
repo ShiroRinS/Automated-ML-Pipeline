@@ -218,13 +218,45 @@ def download_prediction(filename):
 def get_available_features():
     """Get available features from training data"""
     try:
-        from pipelines.train_pipeline import MLTrainingPipeline
-        pipeline = MLTrainingPipeline()
-        pipeline.load_data()
-        feature_info = pipeline.analyze_features()
+        # Load data only once and cache it
+        data_path = TRAINING_DIR / "data" / "titanic.csv"
+        if not data_path.exists():
+            raise FileNotFoundError(f"Training data not found at {data_path}")
+            
+        df = pd.read_csv(data_path)
+        features = list(df.columns[:-1])  # Assume last column is target
+        
+        # Analyze features efficiently
+        feature_info = []
+        for i, feature in enumerate(features):
+            feature_data = df[feature]
+            missing_count = feature_data.isnull().sum()
+            missing_pct = (missing_count / len(feature_data)) * 100
+            
+            info = {
+                'index': i + 1,
+                'name': feature,
+                'type': str(feature_data.dtype),
+                'missing': int(missing_count),
+                'missing_pct': float(missing_pct),
+                'unique_values': int(feature_data.nunique()),
+                'sample_values': feature_data.dropna().head().tolist()
+            }
+            
+            if feature_data.dtype in ['int64', 'float64']:
+                info.update({
+                    'mean': float(feature_data.mean()),
+                    'std': float(feature_data.std()),
+                    'min': float(feature_data.min()),
+                    'max': float(feature_data.max())
+                })
+            
+            feature_info.append(info)
+        
         return jsonify({
             'success': True,
-            'features': feature_info
+            'features': feature_info,
+            'target': df.columns[-1]
         })
     except Exception as e:
         return jsonify({
