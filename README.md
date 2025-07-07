@@ -1,39 +1,48 @@
 # Automated ML Pipeline
 
-Automated Pipeline to help AI engineer life dealing with basic process easier.
+Automated Pipeline to help AI engineers streamline their workflow with an interactive web UI and automated ML processes.
 
-A quick prototype for an automated machine learning pipeline with training and prediction components.
+This project provides a complete machine learning pipeline with training, prediction, and model management through a web interface.
 
 ## Project Structure
 
 ```
 ml_quick_prototype/
-├── training/
-│   ├── data/
+├── pipelines/           # Pipeline orchestration
+│   ├── train_pipeline.py
+│   └── predict_pipeline.py
+├── training/           
+│   ├── data/           # Training data
 │   │   └── raw_data.csv
-│   ├── artifacts/
+│   ├── artifacts/      # Model artifacts
 │   │   ├── model_YYYYMMDD.pkl
 │   │   ├── scaler_YYYYMMDD.pkl
 │   │   └── features_YYYYMMDD.json
-│   ├── logs/
-│   │   └── train_logs.csv
+│   ├── logs/          # Training history
+│   │   └── training_history.csv
 │   └── train.py
 ├── prediction/
-│   ├── data/
+│   ├── data/          # Input data
 │   │   └── incoming_data.csv
-│   ├── output/
+│   ├── output/        # Predictions
 │   │   └── prediction_YYYYMMDD.csv
 │   └── predict.py
+├── web_ui/            # Web interface
+│   ├── templates/     # HTML templates
+│   └── app.py        # Flask application
 ├── requirements.txt
 └── README.md
 ```
 
 ## Features
 
+- **Interactive Web UI**: Manage models and predictions through a user-friendly interface
 - **Training Pipeline**: Trains a RandomForest classifier with automatic artifact saving
 - **Prediction Pipeline**: Loads trained models and makes predictions on new data
-- **Logging**: Comprehensive training event logging
+- **Feature Selection**: Clickable interface for selecting and managing model features
+- **Logging**: Comprehensive training event logging with performance tracking
 - **Artifact Management**: Automatic versioning of models, scalers, and feature metadata
+- **Dashboard**: Real-time overview of system status and recent activities
 
 ## Installation
 
@@ -56,30 +65,47 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Web Interface
+
+1. Start the web server:
+```bash
+python web_ui/app.py
+```
+Access the UI at: http://localhost:5000
+
 ### Training
 
+1. Place your training data in `training/data/raw_data.csv`
+2. Run the training pipeline:
 ```bash
-cd training
-python train.py
+python pipelines/train_pipeline.py
 ```
 
 This will:
-- Load data from `data/raw_data.csv`
-- Train a RandomForest model
+- Load and preprocess the training data
+- Train a RandomForest model with cross-validation
 - Save model artifacts to `artifacts/`
-- Log training events to `logs/train_logs.csv`
+- Log training events and performance metrics
 
 ### Prediction
 
+1. Place prediction data in `prediction/data/incoming_data.csv`
+2. Run the prediction pipeline:
 ```bash
-cd prediction
-python predict.py
+python pipelines/predict_pipeline.py
 ```
 
 This will:
 - Load the latest trained model
-- Process data from `data/incoming_data.csv`
+- Process new data using saved feature configurations
 - Save predictions to `output/prediction_YYYYMMDD.csv`
+
+### Feature Selection
+
+1. Navigate to the Models page in the web UI
+2. Click the "View Features" button for any model
+3. Use the clickable interface to select/deselect features
+4. Features will be automatically applied to new predictions
 
 ## Requirements
 
