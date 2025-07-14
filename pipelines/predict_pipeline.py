@@ -10,12 +10,14 @@ import json
 from datetime import datetime
 import os
 from pathlib import Path
+from .data_handler import DataHandler
 
 class MLPredictionPipeline:
     def __init__(self, data_path="data/incoming_data.csv", output_path="output", artifacts_dir="artifacts"):
         self.data_path = data_path
         self.output_path = Path(output_path)
         self.artifacts_dir = Path(artifacts_dir)
+        self.data_handler = DataHandler()
 
         # Create output directory if it doesn't exist
         self.output_path.mkdir(exist_ok=True)
@@ -65,13 +67,13 @@ class MLPredictionPipeline:
 
         X = incoming_data[feature_names].copy()
 
-        # Handle missing values
-        print("Handling missing values...")
-        for col in X.columns:
-            if X[col].dtype in ['int64', 'float64']:
-                X[col].fillna(X[col].median(), inplace=True)
-            else:
-                X[col].fillna(X[col].mode()[0] if not X[col].mode().empty else 'Unknown', inplace=True)
+        # Add suggestion scores based on data quality
+        X['suggestion_score'] = X.apply(lambda row: sum([1 for val in row if pd.notna(val)]) / len(row), axis=1)
+        
+        # Use DataHandler for missing value imputation
+        print("Handling missing values using DataHandler...")
+        X = self.data_handler.handle_missing_data(X)
+        X = X.drop('suggestion_score', axis=1)  # Remove the temporary score column
 
         return X, incoming_data
 

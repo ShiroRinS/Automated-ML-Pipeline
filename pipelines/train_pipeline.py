@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from .data_handler import DataHandler
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -34,6 +35,7 @@ class MLTrainingPipeline:
         self.model = None
         self.scaler = None
         self.training_id = None
+        self.data_handler = DataHandler()
         
     def load_data(self):
         """Load and analyze raw data"""
@@ -111,12 +113,73 @@ class MLTrainingPipeline:
                     print("Invalid input, using all features")
                     self.selected_features = self.features.copy()
             elif choice == "3":
-                # Recommend features with < 10% missing values
+                # Enhanced feature recommendation based on multiple criteria
                 recommended = []
+                feature_scores = {}
+                
                 for feature in self.features:
-                    missing_pct = (self.data[feature].isnull().sum() / len(self.data)) * 100
-                    if missing_pct < 10:
-                        recommended.append(feature)
+                    feature_data = self.data[feature]
+                    score = 0
+                    
+                    # 1. Missing Value Analysis (30% weight)
+                    missing_pct = (feature_data.isnull().sum() / len(self.data)) * 100
+                    if missing_pct < 5:
+                        score += 30
+                    elif missing_pct < 15:
+                        score += 20
+                    elif missing_pct < 30:
+                        score += 10
+                    
+                    # 2. Variance/Distribution Analysis (30% weight)
+                    if feature_data.dtype in ['int64', 'float64']:
+                        # For numerical features: check variance
+                        if feature_data.nunique() > 1:  # Avoid division by zero
+                            normalized_variance = feature_data.var() / (feature_data.max() - feature_data.min())**2
+                            if normalized_variance > 0.1:
+                                score += 30
+                            elif normalized_variance > 0.05:
+                                score += 20
+                            elif normalized_variance > 0.01:
+                                score += 10
+                    else:
+                        # For categorical features: check distribution
+                        value_counts = feature_data.value_counts(normalize=True)
+                        if value_counts.iloc[0] < 0.8:  # No single value dominates (80% threshold)
+                            score += 30
+                        elif value_counts.iloc[0] < 0.9:
+                            score += 20
+                        elif value_counts.iloc[0] < 0.95:
+                            score += 10
+                    
+                    # 3. Unique Values Analysis (20% weight)
+                    unique_ratio = feature_data.nunique() / len(feature_data)
+                    if 0.01 <= unique_ratio <= 0.9:  # Good range of unique values
+                        score += 20
+                    elif unique_ratio < 0.01:
+                        score += 10  # Very few unique values
+                    elif unique_ratio > 0.9:
+                        score += 5   # Too many unique values (might be an ID)
+                    
+                    # 4. Data Type Suitability (20% weight)
+                    if feature_data.dtype in ['int64', 'float64']:
+                        score += 20  # Numerical features are generally good
+                    elif feature_data.dtype == 'object' and feature_data.nunique() < len(feature_data) * 0.5:
+                        score += 15  # Categorical with reasonable cardinality
+                    
+                    feature_scores[feature] = score
+                
+                # Select features with scores above average
+                avg_score = sum(feature_scores.values()) / len(feature_scores)
+                recommended = [f for f, score in feature_scores.items() if score >= avg_score]
+                
+                # Print feature scores for transparency
+                print("\nFeature Recommendation Scores:")
+                print("-" * 50)
+                for feature, score in sorted(feature_scores.items(), key=lambda x: x[1], reverse=True):
+                    status = "✓ Selected" if score >= avg_score else "✗ Not Selected"
+                    print(f"{feature:<20} Score: {score:>3} - {status}")
+                print("-" * 50)
+                
                 self.selected_features = recommended
             elif choice == "4" or choice.lower() in ['back', 'b']:
                 print("↩️  Returning to main menu...")
@@ -139,13 +202,21 @@ class MLTrainingPipeline:
         X = self.data[self.selected_features].copy()
         y = self.data[self.target].copy()
         
-        # Handle missing values
+        # Handle missing values using DataHandler
         print("Handling missing values...")
-        for col in X.columns:
-            if X[col].dtype in ['int64', 'float64']:
-                X[col].fillna(X[col].median(), inplace=True)
-            else:
-                X[col].fillna(X[col].mode()[0] if not X[col].mode().empty else 'Unknown', inplace=True)
+        # Get feature suggestions using Gemini
+        print("Getting feature suggestions...")
+        import asyncio
+        suggestions = asyncio.run(self.data_handler.get_feature_suggestions(X))
+        print("Feature Engineering Suggestions:")
+        print(suggestions['raw_suggestions'])
+        
+        # Add suggestion scores based on data quality
+        X['suggestion_score'] = X.apply(lambda row: sum([1 for val in row if pd.notna(val)]) / len(row), axis=1)
+        
+        # Use DataHandler for missing value imputation
+        X = self.data_handler.handle_missing_data(X)
+        X = X.drop('suggestion_score', axis=1)  # Remove the temporary score column
         
         # Remove rows with missing target
         mask = ~y.isnull()
@@ -171,8 +242,14 @@ class MLTrainingPipeline:
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
         
-        # Train model
-        self.model = RandomForestClassifier(n_estimators=100, random_state=random_state)
+        # Train and tune model using DataHandler
+        tuning_results = self.data_handler.tune_model_parameters(RandomForestClassifier(), X_train_scaled, y_train)
+        print("\nModel Tuning Results:")
+        print(f"Best parameters: {tuning_results['best_params']}")
+        print(f"Best CV score: {tuning_results['best_score']:.4f}")
+        
+        # Train final model with tuned parameters
+        self.model = RandomForestClassifier(**tuning_results['best_params'], random_state=random_state)
         self.model.fit(X_train_scaled, y_train)
         
         # Evaluate
