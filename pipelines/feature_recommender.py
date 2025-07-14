@@ -133,21 +133,38 @@ class FeatureRecommender:
             print("Getting Gemini suggestions...")
             # Get Gemini suggestions
             if ENABLE_GEMINI:
+                # Generate dynamic dataset summary
+                numeric_features = data_clean.select_dtypes(include=['int64', 'float64']).columns
+                categorical_features = data_clean.select_dtypes(include=['object']).columns
+                
+                # Create feature descriptions
+                feature_descriptions = []
+                for col in data_clean.columns:
+                    col_type = data_clean[col].dtype
+                    missing_pct = (data_clean[col].isna().sum() / len(data_clean)) * 100
+                    
+                    description = f"- {col}: "
+                    if col_type in ['int64', 'float64']:
+                        description += f"Numeric feature (range: {data_clean[col].min():.2f} to {data_clean[col].max():.2f})"
+                    else:
+                        unique_vals = data_clean[col].nunique()
+                        description += f"Categorical feature ({unique_vals} unique values)"
+                    
+                    if missing_pct > 0:
+                        description += f", {missing_pct:.1f}% missing"
+                    
+                    feature_descriptions.append(description)
+                
                 data_description = f"""
                 Dataset Summary:
                 - Total Samples: {len(data_clean)}
                 - Features: {', '.join(data_clean.columns)}
-                - Numeric Features: {', '.join(data_clean.select_dtypes(include=['int64', 'float64']).columns)}
-                - Target Variable: Survival prediction (0: Did not survive, 1: Survived)
+                - Numeric Features: {', '.join(numeric_features)}
+                - Categorical Features: {', '.join(categorical_features)}
+                - Target Variable: {data_clean.columns[-1]} (assumed last column)
                 
-                Key Features:
-                - Pclass: Passenger class (1st, 2nd, 3rd)
-                - Sex: Gender (encoded as 0: Female, 1: Male)
-                - Age: Age in years
-                - SibSp: Number of siblings/spouses aboard
-                - Parch: Number of parents/children aboard
-                - Fare: Passenger fare
-                - Embarked: Port of embarkation (C: Cherbourg, Q: Queenstown, S: Southampton)
+                Feature Details:
+                {chr(10).join(feature_descriptions)}
                 """
                 
                 prompt = f"""
@@ -155,8 +172,13 @@ Analyze the dataset below and provide feature recommendations in a structured fo
 
 {data_description}
 
-IMPORTANT: First generate a JSON structure exactly like this example, then I will ask you to convert it to markdown.
-Replace the example insights with relevant ones for the Titanic dataset while keeping the exact structure:
+Your task is to analyze this dataset and recommend features for a machine learning model. Focus on:
+1. Feature importance and relevance to prediction
+2. Data quality considerations
+3. Feature engineering opportunities
+
+IMPORTANT: First generate a JSON structure exactly like this example, then convert it to markdown.
+Replace the example insights with relevant ones for this dataset while keeping the exact structure:
 
 {{
     "recommended_features": [
@@ -228,8 +250,9 @@ Ensure your response includes all three sections with exact headings and emojis.
                 )
             else:
                 suggestions = "Gemini suggestions not available. Please configure GEMINI_API_KEY."
+                print("Gemini API not configured")
             
-            print("Got Gemini suggestions")
+            print("Finished getting suggestions")
             
             # Calculate feature importance
             print("Calculating feature importance scores...")
