@@ -59,11 +59,8 @@ class ModelTrainingPage:
             y = self.data[self.target]
             
             print("Removing problematic features...")
-        # Specify optional exclusions for known datasets
-        exclude_features = []
-        additional_exclusions = input("Enter any additional features to exclude (comma-separated): ").split(",")
-        exclude_features.extend([feature.strip() for feature in additional_exclusions if feature.strip()])
-        exclude_features.append(self.target)
+            # Specify optional exclusions for known datasets
+            exclude_features = [self.target]  # Always exclude target variable
             features_to_use = [f for f in self.features if f not in exclude_features]
             X = X[features_to_use]
             
