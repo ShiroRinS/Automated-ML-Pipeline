@@ -5,6 +5,9 @@
 {% block head %}
 <!-- Include marked.js for markdown parsing -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Include Bootstrap tooltips -->
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
 <!-- Include custom suggestions script -->
 <script src="{{ url_for('static', filename='js/show_suggestions.js') }}"></script>
 {% endblock %}
@@ -346,7 +349,8 @@ $(document).ready(function() {
         // Show feature importance
         if (initial_recommendations.feature_importances && initial_recommendations.feature_importances.length > 0) {
             console.log('Displaying feature importance for:', initial_recommendations.feature_importances);
-            showFeatureImportance(initial_recommendations.feature_importances);
+showFeatureImportance(initial_recommendations.feature_importances);
+initTooltips();
             
             // Also populate available features from importance scores
             loadFeaturesFromImportance(initial_recommendations.feature_importances);
@@ -451,7 +455,7 @@ function showFeatureImportance(importances) {
     importances.forEach(function(item) {
         var importance = (item.importance * 100).toFixed(2);
         html += `
-            <div class="list-group-item feature-item" data-feature="${item.feature}" data-importance="${item.importance}">
+            <div class="list-group-item feature-item" data-feature="${item.feature}" data-importance="${item.importance}" data-bs-toggle="tooltip" data-bs-placement="right" title="${descriptions[item.feature]?.full || 'No detailed description available'}">
                 <div class="d-flex w-100 justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-1">${item.feature}</h6>
@@ -492,22 +496,53 @@ html += `
     $('#availableFeatures').html(html).show();
 }
 
+function initTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl, {
+            html: true,
+            template: '<div class="tooltip" role="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner text-start" style="max-width: 300px;"></div></div>'
+        });
+    });
+}
+
 function loadFeaturesFromImportance(importances) {
-    // Feature descriptions
+    // Feature descriptions with detailed explanations
     const descriptions = {
-        'Sex': 'Passenger gender (male/female)',
-        'Fare': 'Ticket fare paid',
-        'Age': 'Age of passenger in years',
-        'Pclass': 'Passenger class (1st, 2nd, 3rd)',
-        'SibSp': 'Number of siblings/spouses aboard',
-        'Parch': 'Number of parents/children aboard',
-        'Embarked': 'Port of embarkation (C=Cherbourg, Q=Queenstown, S=Southampton)'
+        'Sex': {
+            short: 'Passenger gender (male/female)',
+            full: 'Passenger gender, encoded as 1 for male and 0 for female. Strong predictor of survival as women were prioritized for rescue.'
+        },
+        'Fare': {
+            short: 'Ticket fare paid',
+            full: 'Ticket fare in pounds (£). Higher fares typically indicate first-class passengers and correlate with better cabins and deck positions.'
+        },
+        'Age': {
+            short: 'Age of passenger in years',
+            full: 'Passenger age in years. Children and elderly had different survival patterns. Contains ~20% missing values, imputed with median age.'
+        },
+        'Pclass': {
+            short: 'Passenger class (1st, 2nd, 3rd)',
+            full: 'Ticket class: 1 = First (Upper), 2 = Second (Middle), 3 = Third (Lower). Proxy for socio-economic status and deck level on ship.'
+        },
+        'SibSp': {
+            short: 'Number of siblings/spouses aboard',
+            full: 'Number of siblings and spouses aboard. Family size affected survival chances, with mid-sized family groups having better survival rates.'
+        },
+        'Parch': {
+            short: 'Number of parents/children aboard',
+            full: 'Number of parents and children aboard. Combined with SibSp gives total family size. Small children with parents had higher survival rates.'
+        },
+        'Embarked': {
+            short: 'Port of embarkation',
+            full: 'Port where passenger boarded: C = Cherbourg, Q = Queenstown, S = Southampton. May indicate passenger wealth and nationality.'
+        }
     };
 
     var features = importances.map(item => ({
         name: item.feature,
         importance: item.importance,
-        type: descriptions[item.feature] || 'No description available'
+        type: descriptions[item.feature]?.short || 'No description available'
     }));
 
     loadFeatures(features);
