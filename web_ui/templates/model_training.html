@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Model Training{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Feature Recommendations Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Feature Recommendations</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <!-- Gemini Suggestions -->
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Gemini 2.5-flash Suggestions</h6>
+                        </div>
+                        <div class="card-body" id="geminiSuggestions">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="sr-only">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <!-- Feature Importance -->
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Feature Importance Analysis</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="featureImportanceChart"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Selection Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Feature Selection</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <!-- Available Features -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Available Features</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group" id="availableFeatures">
+                                <!-- Features will be added here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <!-- Selected Features -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Selected Features</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group" id="selectedFeatures">
+                                <!-- Selected features will be shown here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initial Training Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Initial Training</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <!-- Training Parameters -->
+                    <div class="form-group">
+                        <label for="testSize">Test Size</label>
+                        <input type="range" class="form-control-range" id="testSize" min="10" max="40" value="20">
+                        <small class="form-text text-muted">Test set size: <span id="testSizeValue">20</span>%</small>
+                    </div>
+                    <button class="btn btn-primary" id="trainButton">Train Model</button>
+                </div>
+                <div class="col-md-8">
+                    <!-- Training Results -->
+                    <div id="trainingResults" style="display: none;">
+                        <h6>Training Results</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="info-box">
+                                    <h6>Training Score</h6>
+                                    <p id="trainScore">-</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="info-box">
+                                    <h6>Test Score</h6>
+                                    <p id="testScore">-</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="info-box">
+                                    <h6>CV Score</h6>
+                                    <p id="cvScore">-</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="info-box">
+                                    <h6>Feature Count</h6>
+                                    <p id="featureCount">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <!-- Classification Report -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Classification Report</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="classificationReport"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- Confusion Matrix -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Confusion Matrix</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="confusionMatrix"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Tuning Section -->
+    <div class="card mb-4" id="tuningSection" style="display: none;">
+        <div class="card-header">
+            <h5 class="mb-0">Model Tuning</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <!-- Hyperparameter Settings -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Hyperparameters</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="hyperparametersForm">
+                                <!-- Parameters will be added here -->
+                            </form>
+                            <button class="btn btn-primary mt-3" id="tuneButton">Tune Model</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <!-- Tuning Results -->
+                    <div id="tuningResults" style="display: none;">
+                        <h6>Tuning Results</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <!-- Best Parameters -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Best Parameters</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="bestParams"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- Performance Improvement -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Performance Improvement</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="performanceImprovement"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <button class="btn btn-secondary" id="backButton">Back to Data Cleaning</button>
+            <button class="btn btn-success" id="saveModelButton" style="display: none;">Save Model</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+.info-box {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    text-align: center;
+}
+.info-box h6 {
+    margin-bottom: 5px;
+    color: #666;
+}
+.info-box p {
+    font-size: 1.2em;
+    margin: 0;
+    font-weight: bold;
+}
+.feature-item {
+    cursor: pointer;
+    user-select: none;
+}
+.feature-item:hover {
+    background-color: #f8f9fa;
+}
+.feature-item.selected {
+    background-color: #e9ecef;
+}
+</style>
+
+<!-- Custom Scripts -->
+<script>
+$(document).ready(function() {
+    // Load feature recommendations
+    loadFeatureRecommendations();
+    
+    // Feature selection handling
+    $(document).on('click', '.feature-item', function() {
+        $(this).toggleClass('selected');
+        updateSelectedFeatures();
+    });
+    
+    // Test size slider
+    $('#testSize').on('input', function() {
+        $('#testSizeValue').text($(this).val());
+    });
+    
+    // Train button
+    $('#trainButton').click(function() {
+        trainModel();
+    });
+    
+    // Tune button
+    $('#tuneButton').click(function() {
+        tuneModel();
+    });
+    
+    // Save model button
+    $('#saveModelButton').click(function() {
+        saveModel();
+    });
+    
+    // Back button
+    $('#backButton').click(function() {
+        window.location.href = '/clean-data';
+    });
+});
+
+function loadFeatureRecommendations() {
+    $.get('/api/feature-recommendations', function(response) {
+        if (response.success) {
+            // Show Gemini suggestions
+            $('#geminiSuggestions').html(response.suggestions);
+            
+            // Create feature importance chart
+            createFeatureImportanceChart(response.feature_importances);
+            
+            // Load available features
+            loadFeatures(response.features);
+        } else {
+            alert('Error loading recommendations: ' + response.error);
+        }
+    });
+}
+
+function createFeatureImportanceChart(importances) {
+    // Implementation using your preferred charting library
+    // (e.g., Chart.js, Plotly, etc.)
+}
+
+function loadFeatures(features) {
+    var html = '';
+    features.forEach(function(feature) {
+        html += `
+            <div class="list-group-item feature-item" data-feature="${feature.name}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${feature.name}</h6>
+                    <small>${feature.importance.toFixed(4)}</small>
+                </div>
+                <small>${feature.description}</small>
+            </div>
+        `;
+    });
+    $('#availableFeatures').html(html);
+}
+
+function updateSelectedFeatures() {
+    var selected = [];
+    $('.feature-item.selected').each(function() {
+        selected.push($(this).data('feature'));
+    });
+    updateSelectedFeaturesList(selected);
+}
+
+function updateSelectedFeaturesList(features) {
+    var html = '';
+    features.forEach(function(feature) {
+        html += `
+            <div class="list-group-item">
+                ${feature}
+            </div>
+        `;
+    });
+    $('#selectedFeatures').html(html);
+}
+
+function trainModel() {
+    var selectedFeatures = $('.feature-item.selected').map(function() {
+        return $(this).data('feature');
+    }).get();
+    
+    var testSize = $('#testSize').val() / 100;
+    
+    $.ajax({
+        url: '/api/train-model',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            features: selectedFeatures,
+            test_size: testSize
+        }),
+        success: function(response) {
+            if (response.success) {
+                showTrainingResults(response.results);
+                $('#tuningSection').show();
+                $('#saveModelButton').show();
+            } else {
+                alert('Error training model: ' + response.error);
+            }
+        },
+        error: function() {
+            alert('Error training model');
+        }
+    });
+}
+
+function showTrainingResults(results) {
+    $('#trainingResults').show();
+    $('#trainScore').text((results.train_score * 100).toFixed(2) + '%');
+    $('#testScore').text((results.test_score * 100).toFixed(2) + '%');
+    $('#cvScore').text((results.cv_mean * 100).toFixed(2) + '%');
+    $('#featureCount').text(results.n_features);
+    
+    // Show classification report
+    showClassificationReport(results.classification_report);
+    
+    // Show confusion matrix
+    showConfusionMatrix(results.confusion_matrix);
+}
+
+function showClassificationReport(report) {
+    var html = '<table class="table table-sm">';
+    // Add table content based on classification report
+    html += '</table>';
+    $('#classificationReport').html(html);
+}
+
+function showConfusionMatrix(matrix) {
+    // Implementation using your preferred visualization method
+}
+
+function tuneModel() {
+    var params = {};
+    $('#hyperparametersForm input').each(function() {
+        params[$(this).attr('name')] = $(this).val();
+    });
+    
+    $.ajax({
+        url: '/api/tune-model',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(params),
+        success: function(response) {
+            if (response.success) {
+                showTuningResults(response.results);
+            } else {
+                alert('Error tuning model: ' + response.error);
+            }
+        },
+        error: function() {
+            alert('Error tuning model');
+        }
+    });
+}
+
+function showTuningResults(results) {
+    $('#tuningResults').show();
+    
+    // Show best parameters
+    var paramsHtml = '<ul class="list-unstyled">';
+    Object.entries(results.best_params).forEach(([param, value]) => {
+        paramsHtml += `<li><strong>${param}:</strong> ${value}</li>`;
+    });
+    paramsHtml += '</ul>';
+    $('#bestParams').html(paramsHtml);
+    
+    // Show performance improvement
+    var improvementHtml = `
+        <div class="text-center">
+            <h3>${(results.improvement * 100).toFixed(2)}%</h3>
+            <p>Performance Improvement</p>
+        </div>
+    `;
+    $('#performanceImprovement').html(improvementHtml);
+}
+
+function saveModel() {
+    $.post('/api/save-model', function(response) {
+        if (response.success) {
+            alert('Model saved successfully!');
+            window.location.href = '/models';
+        } else {
+            alert('Error saving model: ' + response.error);
+        }
+    });
+}
+</script>
+{% endblock %}

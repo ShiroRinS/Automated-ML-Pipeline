@@ -10,8 +10,14 @@ import os
 from pathlib import Path
 from datetime import datetime
 import glob
+from pipelines.data_cleaning_page import DataCleaningPage
+from pipelines.model_training_page import ModelTrainingPage
 
 app = Flask(__name__)
+
+# Initialize pages
+data_cleaning = DataCleaningPage()
+model_training = ModelTrainingPage()
 app.config['SECRET_KEY'] = 'ml_pipeline_ui_secret_key'
 
 # Base directory paths
@@ -32,13 +38,154 @@ def index():
     except Exception as e:
         return render_template('error.html', error=str(e))
 
+@app.route('/clean-data')
+def clean_data():
+    """Data cleaning page"""
+    try:
+        return render_template('data_cleaning.html')
+    except Exception as e:
+        return render_template('error.html', error=str(e))
+
 @app.route('/train')
 def train_model():
     """Train new model with feature selection"""
     try:
-        return render_template('training.html')
+        return render_template('model_training.html')
     except Exception as e:
         return render_template('error.html', error=str(e))
+
+@app.route('/api/upload-data', methods=['POST'])
+def upload_data():
+    """Handle data file upload"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'})
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+            
+        # Save file temporarily
+        temp_path = TRAINING_DIR / 'data' / 'temp.csv'
+        file.save(temp_path)
+        
+        # Load and analyze data
+        analysis = data_cleaning.load_data(str(temp_path))
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'columns': [
+                {
+                    'name': col,
+                    'type': analysis['data_types'][col],
+                    'missing_pct': analysis['missing_stats'][col]['percentage']
+                }
+                for col in analysis['data_types'].keys()
+            ]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cleaning-options/<column>')
+def get_cleaning_options(column):
+    """Get cleaning options for a column"""
+    try:
+        options = data_cleaning.get_cleaning_options()[column]
+        return jsonify({'success': True, 'options': options})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/apply-cleaning', methods=['POST'])
+def apply_cleaning():
+    """Apply cleaning method to data"""
+    try:
+        data = request.json
+        df, message = data_cleaning.apply_cleaning(
+            column=data['column'],
+            method=data['method'],
+            params=data.get('params')
+        )
+        
+        # Generate preview HTML
+        preview = df.head().to_html(classes='table table-striped')
+        
+        return jsonify({
+            'success': True,
+            'preview': preview,
+            'history': data_cleaning.get_cleaning_history(),
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/undo-cleaning', methods=['POST'])
+def undo_cleaning():
+    """Undo last cleaning operation"""
+    try:
+        df, message = data_cleaning.undo_last_cleaning()
+        preview = df.head().to_html(classes='table table-striped')
+        
+        return jsonify({
+            'success': True,
+            'preview': preview,
+            'history': data_cleaning.get_cleaning_history(),
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/save-cleaned-data', methods=['POST'])
+def save_cleaned_data():
+    """Save cleaned data"""
+    try:
+        output_path = TRAINING_DIR / 'data' / 'cleaned_data.csv'
+        message = data_cleaning.save_cleaned_data(str(output_path))
+        return jsonify({'success': True, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/feature-recommendations')
+def get_feature_recommendations():
+    """Get feature recommendations from Gemini"""
+    try:
+        model_training.load_data(str(TRAINING_DIR / 'data' / 'cleaned_data.csv'))
+        recommendations = await model_training.get_feature_recommendations()
+        return jsonify({'success': True, **recommendations})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/train-model', methods=['POST'])
+def start_model_training():
+    """Start model training with selected features"""
+    try:
+        data = request.json
+        results = model_training.train_initial_model(
+            selected_features=data['features'],
+            test_size=data['test_size']
+        )
+        return jsonify({'success': True, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/tune-model', methods=['POST'])
+def tune_model():
+    """Tune model hyperparameters"""
+    try:
+        params = request.json
+        results = model_training.tune_model(param_grid=params)
+        return jsonify({'success': True, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/save-model', methods=['POST'])
+def save_trained_model():
+    """Save trained model"""
+    try:
+        paths = model_training.save_model(str(ARTIFACTS_DIR))
+        return jsonify({'success': True, 'paths': paths})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/predictions')
 def predictions():
@@ -214,50 +361,95 @@ def download_prediction(filename):
     except Exception as e:
         return render_template('error.html', error=str(e))
 
+@app.route('/test')
+def test_endpoint():
+    """Test endpoint to verify API is working and return features"""
+    print("Test endpoint called")
+    try:
+        data_path = TRAINING_DIR / "data" / "titanic.csv"
+        df = pd.read_csv(data_path)
+        features = list(df.columns[:-1])  # Assume last column is target
+        print(f"Test endpoint features: {features}")
+        return jsonify({
+            'success': True,
+            'message': 'API is working',
+            'features': features
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 @app.route('/training/features')
 def get_available_features():
     """Get available features from training data"""
+    print("\n=== Feature Loading Debug Log ===")
+    print("Request received for features")
     try:
+        print("1. Loading features...")
         # Load data only once and cache it
         data_path = TRAINING_DIR / "data" / "titanic.csv"
+        print(f"2. Data path: {data_path}")
+        print(f"3. Data path exists: {data_path.exists()}")
+        
         if not data_path.exists():
+            print("ERROR: Data file not found!")
             raise FileNotFoundError(f"Training data not found at {data_path}")
-            
-        df = pd.read_csv(data_path)
+        
+        print("4. Reading CSV file...")
+        try:
+            df = pd.read_csv(data_path)
+            print(f"5. CSV loaded successfully. Shape: {df.shape}")
+            print(f"6. Columns: {list(df.columns)}")
+        except Exception as e:
+            print(f"ERROR reading CSV: {str(e)}")
+            raise
+        
         features = list(df.columns[:-1])  # Assume last column is target
+        print(f"7. Extracted features: {features}")
         
-        # Analyze features efficiently
+        print("8. Analyzing features...")
         feature_info = []
-        for i, feature in enumerate(features):
-            feature_data = df[feature]
-            missing_count = feature_data.isnull().sum()
-            missing_pct = (missing_count / len(feature_data)) * 100
-            
-            info = {
-                'index': i + 1,
-                'name': feature,
-                'type': str(feature_data.dtype),
-                'missing': int(missing_count),
-                'missing_pct': float(missing_pct),
-                'unique_values': int(feature_data.nunique()),
-                'sample_values': feature_data.dropna().head().tolist()
-            }
-            
-            if feature_data.dtype in ['int64', 'float64']:
-                info.update({
-                    'mean': float(feature_data.mean()),
-                    'std': float(feature_data.std()),
-                    'min': float(feature_data.min()),
-                    'max': float(feature_data.max())
-                })
-            
-            feature_info.append(info)
+        try:
+            for i, feature in enumerate(features):
+                print(f"   Processing feature: {feature}")
+                feature_data = df[feature]
+                missing_count = feature_data.isnull().sum()
+                missing_pct = (missing_count / len(feature_data)) * 100
+                
+                info = {
+                    'index': i + 1,
+                    'name': feature,
+                    'type': str(feature_data.dtype),
+                    'missing': int(missing_count),
+                    'missing_pct': float(missing_pct),
+                    'unique_values': int(feature_data.nunique()),
+                    'sample_values': feature_data.dropna().head().tolist()
+                }
+                
+                if feature_data.dtype in ['int64', 'float64']:
+                    info.update({
+                        'mean': float(feature_data.mean()),
+                        'std': float(feature_data.std()),
+                        'min': float(feature_data.min()),
+                        'max': float(feature_data.max())
+                    })
+                
+                feature_info.append(info)
+                print(f"   Completed feature: {feature}")
+        except Exception as e:
+            print(f"ERROR analyzing features: {str(e)}")
+            raise
         
-        return jsonify({
+        print("9. Preparing JSON response...")
+        response = {
             'success': True,
             'features': feature_info,
             'target': df.columns[-1]
-        })
+        }
+        print("10. Returning response")
+        return jsonify(response)
     except Exception as e:
         return jsonify({
             'success': False,

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Data Cleaning{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Data Upload Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Upload Data</h5>
+        </div>
+        <div class="card-body">
+            <form id="uploadForm" class="mb-3">
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="dataFile" accept=".csv">
+                    <label class="custom-file-label" for="dataFile">Choose file</label>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Data Analysis Section -->
+    <div class="card mb-4" id="analysisCard" style="display: none;">
+        <div class="card-header">
+            <h5 class="mb-0">Data Analysis</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="info-box">
+                        <h6>Total Rows</h6>
+                        <p id="totalRows">-</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-box">
+                        <h6>Total Columns</h6>
+                        <p id="totalColumns">-</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-box">
+                        <h6>Missing Values</h6>
+                        <p id="totalMissing">-</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-box">
+                        <h6>Data Quality Score</h6>
+                        <p id="qualityScore">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Cleaning Section -->
+    <div class="row">
+        <!-- Column Selection -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Columns</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group" id="columnList">
+                        <!-- Columns will be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cleaning Options -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Cleaning Options</h5>
+                </div>
+                <div class="card-body">
+                    <div id="cleaningOptions">
+                        <!-- Options will be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Preview</h5>
+                </div>
+                <div class="card-body">
+                    <div id="dataPreview">
+                        <!-- Preview will be shown here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cleaning History -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Cleaning History</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Column</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- History will be added here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <button class="btn btn-secondary" id="undoBtn">Undo Last Action</button>
+            <button class="btn btn-primary" id="saveBtn">Save Cleaned Data</button>
+            <button class="btn btn-success" id="proceedBtn">Proceed to Model Training</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+.info-box {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    text-align: center;
+}
+.info-box h6 {
+    margin-bottom: 5px;
+    color: #666;
+}
+.info-box p {
+    font-size: 1.2em;
+    margin: 0;
+    font-weight: bold;
+}
+</style>
+
+<!-- Custom Scripts -->
+<script>
+$(document).ready(function() {
+    // File upload handling
+    $('#dataFile').change(function() {
+        var fileName = $(this).val().split('\\').pop();
+        $(this).next('.custom-file-label').html(fileName);
+        
+        // Upload file
+        var formData = new FormData();
+        formData.append('file', this.files[0]);
+        
+        $.ajax({
+            url: '/api/upload-data',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    showAnalysis(response.analysis);
+                    loadColumns(response.columns);
+                } else {
+                    alert('Error uploading file: ' + response.error);
+                }
+            },
+            error: function() {
+                alert('Error uploading file');
+            }
+        });
+    });
+
+    // Column selection
+    $(document).on('click', '.column-item', function() {
+        $('.column-item').removeClass('active');
+        $(this).addClass('active');
+        loadCleaningOptions($(this).data('column'));
+    });
+
+    // Apply cleaning
+    $(document).on('click', '.clean-option', function() {
+        var column = $('.column-item.active').data('column');
+        var method = $(this).data('method');
+        var params = {}; // Add parameters if needed
+        
+        applyCleaning(column, method, params);
+    });
+
+    // Undo button
+    $('#undoBtn').click(function() {
+        undoLastCleaning();
+    });
+
+    // Save button
+    $('#saveBtn').click(function() {
+        saveCleanedData();
+    });
+
+    // Proceed button
+    $('#proceedBtn').click(function() {
+        window.location.href = '/train?cleaned=true';
+    });
+});
+
+function showAnalysis(analysis) {
+    $('#analysisCard').show();
+    $('#totalRows').text(analysis.total_rows);
+    $('#totalColumns').text(analysis.total_columns);
+    $('#totalMissing').text(analysis.total_missing);
+    $('#qualityScore').text(analysis.quality_score + '%');
+}
+
+function loadColumns(columns) {
+    var html = '';
+    columns.forEach(function(col) {
+        html += `
+            <a href="#" class="list-group-item list-group-item-action column-item" data-column="${col.name}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${col.name}</h6>
+                    <small>${col.type}</small>
+                </div>
+                <small>Missing: ${col.missing_pct}%</small>
+            </a>
+        `;
+    });
+    $('#columnList').html(html);
+}
+
+function loadCleaningOptions(column) {
+    $.get('/api/cleaning-options/' + column, function(response) {
+        var html = '';
+        response.options.forEach(function(option) {
+            html += `
+                <button class="btn btn-outline-primary mb-2 w-100 clean-option" data-method="${option}">
+                    ${option}
+                </button>
+            `;
+        });
+        $('#cleaningOptions').html(html);
+    });
+}
+
+function applyCleaning(column, method, params) {
+    $.ajax({
+        url: '/api/apply-cleaning',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            column: column,
+            method: method,
+            params: params
+        }),
+        success: function(response) {
+            if (response.success) {
+                updatePreview(response.preview);
+                updateHistory(response.history);
+            } else {
+                alert('Error applying cleaning: ' + response.error);
+            }
+        },
+        error: function() {
+            alert('Error applying cleaning');
+        }
+    });
+}
+
+function updatePreview(preview) {
+    $('#dataPreview').html(preview);
+}
+
+function updateHistory(history) {
+    var html = '';
+    history.forEach(function(item) {
+        html += `
+            <tr>
+                <td>${item.timestamp}</td>
+                <td>${item.column}</td>
+                <td>${item.method}</td>
+                <td>${item.result_message}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="undoTo('${item.id}')">
+                        Undo to here
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    $('#historyTable tbody').html(html);
+}
+
+function undoLastCleaning() {
+    $.post('/api/undo-cleaning', function(response) {
+        if (response.success) {
+            updatePreview(response.preview);
+            updateHistory(response.history);
+        } else {
+            alert('Error undoing last action: ' + response.error);
+        }
+    });
+}
+
+function saveCleanedData() {
+    $.post('/api/save-cleaned-data', function(response) {
+        if (response.success) {
+            alert('Data saved successfully!');
+        } else {
+            alert('Error saving data: ' + response.error);
+        }
+    });
+}
+</script>
+{% endblock %}

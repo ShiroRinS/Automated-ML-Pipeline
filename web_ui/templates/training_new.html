@@ -80,9 +80,8 @@ $(document).ready(function() {
         `);
         
         $.ajax({
-            url: '/training/features',
+            url: '/test',
             method: 'GET',
-            timeout: 30000,  // 30 second timeout
             success: function(response) {
                 console.log('Response:', response);
                 if (response.success && response.features) {
@@ -107,90 +106,44 @@ $(document).ready(function() {
         `);
     }
     
-        function renderFeatures(features) {
-            console.log('Rendering features:', features);
-            const container = $('#featureList');
-            container.empty();
+    function renderFeatures(features) {
+        console.log('Rendering features:', features);
+        const container = $('#featureList');
+        container.empty();
 
-            if (!Array.isArray(features)) {
-                showError('Invalid feature data');
-                return;
-            }
-
-            // Create grid layout with two columns
-            const grid = $('<div>').addClass('row g-3');
-
-            features.forEach(feature => {
-                // Create a card for each feature
-                const card = $('<div>').addClass('col-md-6');
-                const cardContent = $('<div>').addClass('card h-100');
-                const cardBody = $('<div>').addClass('card-body');
-
-                // Feature header with checkbox
-                const header = $('<div>').addClass('d-flex align-items-center mb-2');
-                const button = $('<button>')
-                    .addClass('btn btn-outline-primary w-100 text-start feature-btn')
-                    .attr('data-feature', feature.name)
-                    .html(`
-                        <i class="fas fa-check me-2 d-none"></i>
-                        <strong>${feature.name}</strong>
-                    `)
-                    .click(function() {
-                        const btn = $(this);
-                        const icon = btn.find('i');
-                        btn.toggleClass('active');
-                        icon.toggleClass('d-none');
-                        
-                        if (btn.hasClass('active')) {
-                            selectedFeatures.add(feature.name);
-                        } else {
-                            selectedFeatures.delete(feature.name);
-                        }
-                        updateSelectedCount();
-                    });
-
-                // Feature details
-                const details = $('<div>').addClass('mt-2 small');
-                
-                // Basic info for all features
-                details.append(`
-                    <p class="mb-1"><i class="fas fa-database me-1"></i> Type: <span class="badge bg-secondary">${feature.type}</span></p>
-                    <p class="mb-1"><i class="fas fa-fingerprint me-1"></i> Unique Values: ${feature.unique_values}</p>
-                    <p class="mb-1"><i class="fas fa-exclamation-triangle me-1 ${feature.missing > 0 ? 'text-warning' : 'text-success'}"></i> Missing: ${feature.missing} (${feature.missing_pct.toFixed(1)}%)</p>
-                `);
-
-                // Additional stats for numerical features
-                if (feature.type === 'float64' || feature.type === 'int64') {
-                    details.append(`
-                        <div class="mt-2">
-                            <p class="mb-1"><i class="fas fa-chart-line me-1"></i> Statistics:</p>
-                            <div class="ms-3">
-                                <p class="mb-0">Mean: ${feature.mean.toFixed(2)}</p>
-                                <p class="mb-0">Std: ${feature.std.toFixed(2)}</p>
-                                <p class="mb-0">Range: [${feature.min.toFixed(2)} - ${feature.max.toFixed(2)}]</p>
-                            </div>
-                        </div>
-                    `);
-                }
-
-                // Sample values
-                const sampleValues = feature.sample_values.slice(0, 3).join(', ');
-                details.append(`
-                    <div class="mt-2">
-                        <p class="mb-1"><i class="fas fa-eye me-1"></i> Sample Values:</p>
-                        <p class="mb-0 text-muted">${sampleValues}...</p>
-                    </div>
-                `);
-
-                cardBody.append(button, details);
-                cardContent.append(cardBody);
-                card.append(cardContent);
-                grid.append(card);
-            });
-
-            container.append(grid);
-            updateSelectedCount();
+        if (!Array.isArray(features)) {
+            showError('Invalid feature data');
+            return;
         }
+
+        // Create grid layout
+        const grid = $('<div>').addClass('d-flex flex-wrap gap-2');
+
+        features.forEach(feature => {
+            const button = $('<button>')
+                .addClass('btn btn-outline-primary m-1 feature-btn')
+                .attr('data-feature', feature)
+                .html(`<i class="fas fa-check me-2 d-none"></i>${feature}`)
+                .click(function() {
+                    const btn = $(this);
+                    const icon = btn.find('i');
+                    btn.toggleClass('active');
+                    icon.toggleClass('d-none');
+                    
+                    if (btn.hasClass('active')) {
+                        selectedFeatures.add(feature);
+                    } else {
+                        selectedFeatures.delete(feature);
+                    }
+                    updateSelectedCount();
+                });
+
+            grid.append(button);
+        });
+
+        container.append(grid);
+        updateSelectedCount();
+    }
 
     function updateSelectedCount() {
         const count = selectedFeatures.size;
