@@ -3,21 +3,29 @@
 ML Pipeline Web UI
 Flask application for viewing training history, predictions, and model management
 """
-from flask import Flask, render_template, send_from_directory, jsonify, request
+from quart import Quart, render_template, send_from_directory, jsonify, request
 import pandas as pd
 import json
 import os
 from pathlib import Path
 from datetime import datetime
 import glob
+import sys
+
+# Add the project root to Python path
+sys.path.append(str(Path(__file__).parent.parent))
+
 from pipelines.data_cleaning_page import DataCleaningPage
 from pipelines.model_training_page import ModelTrainingPage
+from pipelines.feature_recommender import FeatureRecommender
+from config import configure_gemini, ENABLE_GEMINI
 
-app = Flask(__name__)
+app = Quart(__name__)
 
-# Initialize pages
+# Initialize pages and components
 data_cleaning = DataCleaningPage()
 model_training = ModelTrainingPage()
+feature_recommender = FeatureRecommender()
 app.config['SECRET_KEY'] = 'ml_pipeline_ui_secret_key'
 
 # Base directory paths
@@ -29,45 +37,87 @@ LOGS_DIR = TRAINING_DIR / "logs"
 OUTPUT_DIR = PREDICTION_DIR / "output"
 
 @app.route('/')
-def index():
+async def index():
     """Main dashboard"""
     try:
         # Get system statistics
-        stats = get_system_stats()
-        return render_template('index.html', stats=stats)
+        stats = await get_system_stats()
+        return await render_template('index.html', stats=stats)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/clean-data')
-def clean_data():
+async def clean_data():
     """Data cleaning page"""
     try:
-        return render_template('data_cleaning.html')
+        return await render_template('data_cleaning.html')
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/train')
-def train_model():
+async def train_model():
     """Train new model with feature selection"""
     try:
-        return render_template('model_training.html')
+        print("Loading training page...")
+        
+        # Load initial data
+        data_path = TRAINING_DIR / 'data' / 'titanic.csv'
+        print(f"Looking for data at: {data_path}")
+        print(f"Data file exists: {data_path.exists()}")
+        
+        try:
+            # Load data
+            data = pd.read_csv(data_path)
+            print("Data loaded successfully")
+            
+            # Get feature recommendations
+            print("Getting feature recommendations...")
+            recommendations = await feature_recommender.get_recommendations(data)
+            print("Got feature recommendations")
+            
+            # Ensure recommendations is serializable
+            safe_recommendations = {
+                'raw_suggestions': recommendations.get('gemini_suggestions', ''),
+                'feature_importances': recommendations.get('feature_importances', []),
+                'timestamp': str(recommendations.get('timestamp', ''))
+            }
+            
+            return await render_template('model_training.html', 
+                                    initial_recommendations=safe_recommendations,
+                                    data_loaded=True)
+            
+        except Exception as e:
+            error_msg = f"Error: {str(e)}"
+            print(error_msg)
+            return await render_template('model_training.html',
+                                    error=error_msg,
+                                    data_loaded=False)
+        
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        error_msg = f"Error: {str(e)}"
+        print(error_msg)
+        return await render_template('model_training.html',
+                                error=error_msg,
+                                data_loaded=False)
+    except Exception as e:
+        print(f"Error in train_model route: {str(e)}")
+        return await render_template('error.html', error=str(e))
 
 @app.route('/api/upload-data', methods=['POST'])
-def upload_data():
+async def upload_data():
     """Handle data file upload"""
     try:
-        if 'file' not in request.files:
+        files = await request.files
+        if 'file' not in files:
             return jsonify({'success': False, 'error': 'No file uploaded'})
             
-        file = request.files['file']
+        file = files['file']
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
             
         # Save file temporarily
         temp_path = TRAINING_DIR / 'data' / 'temp.csv'
-        file.save(temp_path)
+        await file.save(temp_path)
         
         # Load and analyze data
         analysis = data_cleaning.load_data(str(temp_path))
@@ -88,7 +138,7 @@ def upload_data():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/cleaning-options/<column>')
-def get_cleaning_options(column):
+async def get_cleaning_options(column):
     """Get cleaning options for a column"""
     try:
         options = data_cleaning.get_cleaning_options()[column]
@@ -97,10 +147,10 @@ def get_cleaning_options(column):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/apply-cleaning', methods=['POST'])
-def apply_cleaning():
+async def apply_cleaning():
     """Apply cleaning method to data"""
     try:
-        data = request.json
+        data = await request.get_json()
         df, message = data_cleaning.apply_cleaning(
             column=data['column'],
             method=data['method'],
@@ -120,7 +170,7 @@ def apply_cleaning():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/undo-cleaning', methods=['POST'])
-def undo_cleaning():
+async def undo_cleaning():
     """Undo last cleaning operation"""
     try:
         df, message = data_cleaning.undo_last_cleaning()
@@ -136,7 +186,7 @@ def undo_cleaning():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/save-cleaned-data', methods=['POST'])
-def save_cleaned_data():
+async def save_cleaned_data():
     """Save cleaned data"""
     try:
         output_path = TRAINING_DIR / 'data' / 'cleaned_data.csv'
@@ -146,7 +196,7 @@ def save_cleaned_data():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/feature-recommendations')
-def get_feature_recommendations():
+async def get_feature_recommendations():
     """Get feature recommendations from Gemini"""
     try:
         model_training.load_data(str(TRAINING_DIR / 'data' / 'cleaned_data.csv'))
@@ -156,30 +206,81 @@ def get_feature_recommendations():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/train-model', methods=['POST'])
-def start_model_training():
+async def start_model_training():
     """Start model training with selected features"""
     try:
-        data = request.json
-        results = model_training.train_initial_model(
-            selected_features=data['features'],
-            test_size=data['test_size']
-        )
-        return jsonify({'success': True, 'results': results})
+        data = await request.get_json()
+        
+        # Initialize pipeline
+        from pipelines.train_pipeline import MLTrainingPipeline
+        pipeline = MLTrainingPipeline()
+        
+        # Load and prepare data
+        data_path = TRAINING_DIR / 'data' / 'titanic.csv'
+        load_result = pipeline.load_data()
+        
+        if load_result is None:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to load training data'
+            })
+        
+        # Convert feature names to indices
+        feature_indices = []
+        all_features = pipeline.features
+        selected_features = data.get('features', [])
+        
+        for feature in selected_features:
+            try:
+                idx = all_features.index(feature) + 1  # 1-based index
+                feature_indices.append(idx)
+            except ValueError:
+                continue
+        
+        if not feature_indices:
+            return jsonify({
+                'success': False,
+                'error': 'No valid features selected'
+            })
+        
+        # Run training pipeline
+        result = pipeline.run_training_pipeline(feature_indices=feature_indices)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'results': {
+                    'training_id': result['training_id'],
+                    'metrics': result['results'],
+                    'model_path': result['artifacts']['model_path'],
+                    'feature_importance': result['log_entry']['features_used']
+                }
+            })
+        else:
+            error_msg = result.get('error', 'Unknown error occurred')
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            })
+            
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 @app.route('/api/tune-model', methods=['POST'])
-def tune_model():
+async def tune_model():
     """Tune model hyperparameters"""
     try:
-        params = request.json
+        params = await request.get_json()
         results = model_training.tune_model(param_grid=params)
         return jsonify({'success': True, 'results': results})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/save-model', methods=['POST'])
-def save_trained_model():
+async def save_trained_model():
     """Save trained model"""
     try:
         paths = model_training.save_model(str(ARTIFACTS_DIR))
@@ -188,7 +289,7 @@ def save_trained_model():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/predictions')
-def predictions():
+async def predictions():
     """View all prediction results"""
     try:
         prediction_files = []
@@ -202,17 +303,17 @@ def predictions():
                     'path': str(file.relative_to(BASE_DIR))
                 })
         
-        return render_template('predictions.html', files=prediction_files)
+        return await render_template('predictions.html', files=prediction_files)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/predictions/<filename>')
-def view_prediction(filename):
+async def view_prediction(filename):
     """View specific prediction results"""
     try:
         file_path = OUTPUT_DIR / filename
         if not file_path.exists():
-            return render_template('error.html', error=f"Prediction file {filename} not found")
+            return await render_template('error.html', error=f"Prediction file {filename} not found")
         
         df = pd.read_csv(file_path)
         
@@ -235,15 +336,15 @@ def view_prediction(filename):
             summary['not_survived'] = len(df) - summary['survived']
             summary['survival_rate'] = f"{(summary['survived'] / len(df)) * 100:.1f}%"
         
-        return render_template('prediction_detail.html', 
+        return await render_template('prediction_detail.html', 
                              filename=filename,
                              tables=[df_display.to_html(classes='table table-striped', escape=False)],
                              summary=summary)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/training-history')
-def training_history():
+async def training_history():
     """View training history"""
     try:
         history_data = []
@@ -258,17 +359,17 @@ def training_history():
             
             history_data = df.to_dict('records')
         
-        return render_template('training_history.html', history=history_data)
+        return await render_template('training_history.html', history=history_data)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/training-detail/<training_id>')
-def training_detail(training_id):
+async def training_detail(training_id):
     """View detailed training session information"""
     try:
         detail_file = LOGS_DIR / f"training_session_{training_id}.json"
         if not detail_file.exists():
-            return render_template('error.html', error=f"Training session {training_id} not found")
+            return await render_template('error.html', error=f"Training session {training_id} not found")
         
         with open(detail_file, 'r') as f:
             details = json.load(f)
@@ -292,15 +393,15 @@ def training_detail(training_id):
             'Notes': details.get('notes', 'N/A')
         }
         
-        return render_template('training_detail.html', 
+        return await render_template('training_detail.html', 
                              training_id=training_id,
                              details=formatted_details,
                              raw_details=details)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/models')
-def models():
+async def models():
     """View available models"""
     try:
         model_info = []
@@ -327,12 +428,12 @@ def models():
                 
                 model_info.append(info)
         
-        return render_template('models.html', models=model_info)
+        return await render_template('models.html', models=model_info)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
 
 @app.route('/system-status')
-def system_status():
+async def system_status():
     """System health and status"""
     try:
         status = {
@@ -340,15 +441,59 @@ def system_status():
             'files': check_files(),
             'recent_activity': get_recent_activity()
         }
-        return render_template('system_status.html', status=status)
+        return await render_template('system_status.html', status=status)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return await render_template('error.html', error=str(e))
+
+@app.route('/config')
+async def config_page():
+    """Configuration page"""
+    try:
+        return await render_template('config.html')
+    except Exception as e:
+        return await render_template('error.html', error=str(e))
+
+@app.route('/api/configure', methods=['POST'])
+async def configure_api():
+    """Configure API keys"""
+    try:
+        data = await request.get_json()
+        gemini_key = data.get('gemini_api_key')
+        
+        if not gemini_key:
+            return jsonify({
+                'success': False,
+                'error': 'Gemini API key is required'
+            })
+        
+        # Configure Gemini
+        try:
+            configure_gemini(gemini_key)
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Error configuring Gemini: {str(e)}'
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/config-status')
+async def config_status():
+    """Get configuration status"""
+    return jsonify({
+        'gemini_enabled': ENABLE_GEMINI
+    })
 
 @app.route('/api/stats')
-def api_stats():
+async def api_stats():
     """API endpoint for dashboard statistics"""
     try:
-        stats = get_system_stats()
+        stats = await get_system_stats()
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -476,7 +621,7 @@ def start_training():
             'error': str(e)
         }), 500
 
-def get_system_stats():
+async def get_system_stats():
     """Get system statistics for dashboard"""
     stats = {
         'total_models': 0,
@@ -565,6 +710,6 @@ def get_recent_activity():
 
 if __name__ == '__main__':
     print("🌐 Starting ML Pipeline Web UI...")
-    print("📊 Dashboard will be available at: http://localhost:5000")
+    print("📊 Dashboard will be available at: http://localhost:5001")
     print("🔧 Make sure you have run some training and prediction pipelines first!")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

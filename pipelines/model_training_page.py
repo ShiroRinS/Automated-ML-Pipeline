@@ -4,6 +4,7 @@ Handles feature selection, model training, and hyperparameter tuning
 """
 import pandas as pd
 import numpy as np
+import pickle
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from sklearn.model_selection import train_test_split
@@ -44,30 +45,84 @@ class ModelTrainingPage:
     
     async def get_feature_recommendations(self) -> Dict[str, Any]:
         """Get feature recommendations from Gemini"""
-        if self.data is None:
-            raise ValueError("No data loaded. Please load data first.")
+        try:
+            print("Starting feature recommendations...")
+            if self.data is None:
+                raise ValueError("No data loaded. Please load data first.")
             
-        suggestions = await self.data_handler.get_feature_suggestions(self.data)
+            print("Getting Gemini suggestions...")
+            suggestions = await self.data_handler.get_feature_suggestions(self.data)
+            print("Got Gemini suggestions")
+            
+            print("Calculating feature importance scores...")
+            X = self.data[self.features].copy()
+            y = self.data[self.target]
+            
+            print("Removing problematic features...")
+            exclude_features = ['Name', 'Ticket', 'Cabin', self.target]
+            features_to_use = [f for f in self.features if f not in exclude_features]
+            X = X[features_to_use]
+            
+            # Log missing values
+            missing_data = X.isnull().sum()
+            print("\nMissing values in features:")
+            for col, count in missing_data.items():
+                if count > 0:
+                    print(f"{col}: {count} missing values ({(count/len(X))*100:.2f}%)")
+            print(f"Features to use: {features_to_use}")
         
-        # Calculate feature importance scores
-        X = self.data[self.features]
-        y = self.data[self.target]
+            print("Identifying feature types...")
+            categorical_features = X.select_dtypes(include=['object']).columns
+            numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+            print(f"Categorical features: {list(categorical_features)}")
+            print(f"Numeric features: {list(numeric_features)}")
+            
+            print("Handling numeric features...")
+            for col in numeric_features:
+                print(f"Processing numeric feature: {col}")
+                # Handle infinite values first
+                X[col] = X[col].replace([np.inf, -np.inf], np.nan)
+                # Calculate median on non-NaN values
+                median_val = X[col].median()
+                X[col] = X[col].fillna(median_val)
+            
+            print("Handling categorical features...")
+            for col in categorical_features:
+                print(f"Processing categorical feature: {col}")
+                # Replace empty strings with NaN
+                X[col] = X[col].replace('', np.nan)
+                # Fill missing values with mode
+                mode_val = X[col].mode()[0] if not X[col].mode().empty else 'Unknown'
+                X[col] = X[col].fillna(mode_val)
+                # Convert to category codes
+                X[col] = pd.Categorical(X[col]).codes
+            
+            # Check for any remaining NaN values
+            if X.isnull().any().any():
+                raise ValueError(f"Data still contains NaN values after preprocessing")
+                
+            print("Training random forest model...")
+            rf = RandomForestClassifier(n_estimators=100, random_state=42)
+            rf.fit(X, y)
+            print("Random forest model trained successfully")
+            
+            # Get feature importances
+            importances = pd.DataFrame({
+                'feature': features_to_use,
+                'importance': rf.feature_importances_
+            }).sort_values('importance', ascending=False)
         
-        # Train a quick random forest to get feature importances
-        rf = RandomForestClassifier(n_estimators=100, random_state=42)
-        rf.fit(X, y)
-        
-        # Get feature importances
-        importances = pd.DataFrame({
-            'feature': self.features,
-            'importance': rf.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
-        return {
-            'gemini_suggestions': suggestions['raw_suggestions'],
-            'feature_importances': importances.to_dict('records'),
-            'timestamp': suggestions['timestamp']
-        }
+            return {
+                'gemini_suggestions': suggestions['raw_suggestions'],
+                'feature_importances': importances.to_dict('records'),
+                'timestamp': suggestions['timestamp']
+            }
+        except Exception as e:
+            return {
+                'gemini_suggestions': f"Error getting recommendations: {str(e)}",
+                'feature_importances': [],
+                'timestamp': pd.Timestamp.now()
+            }
     
     def train_initial_model(self, selected_features: List[str], test_size: float = 0.2) -> Dict[str, Any]:
         """Train initial model with selected features"""

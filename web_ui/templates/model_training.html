@@ -4,6 +4,11 @@
 
 {% block content %}
 <div class="container-fluid">
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
     <!-- Feature Recommendations Section -->
     <div class="card mb-4">
         <div class="card-header">
@@ -17,10 +22,14 @@
                         <div class="card-header bg-light">
                             <h6 class="mb-0">Gemini 2.5-flash Suggestions</h6>
                         </div>
-                        <div class="card-body" id="geminiSuggestions">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="sr-only">Loading...</span>
+                        <div class="card-body">
+                            <div id="geminiSpinner" class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="sr-only">Loading suggestions...</span>
+                                </div>
+                                <p class="mt-2">Getting feature recommendations...</p>
                             </div>
+                            <div id="geminiSuggestions" style="display: none;"></div>
                         </div>
                     </div>
                 </div>
@@ -53,7 +62,13 @@
                             <h6 class="mb-0">Available Features</h6>
                         </div>
                         <div class="card-body">
-                            <div class="list-group" id="availableFeatures">
+                            <div id="featureSpinner" class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="sr-only">Loading features...</span>
+                                </div>
+                                <p class="mt-2">Loading available features...</p>
+                            </div>
+                            <div class="list-group" id="availableFeatures" style="display: none;">
                                 <!-- Features will be added here -->
                             </div>
                         </div>
@@ -248,8 +263,23 @@
 <!-- Custom Scripts -->
 <script>
 $(document).ready(function() {
-    // Load feature recommendations
-    loadFeatureRecommendations();
+    {% if data_loaded %}
+        {% if initial_recommendations %}
+        // Display initial recommendations
+        showGeminiSuggestions({{ initial_recommendations.raw_suggestions|tojson|safe }});
+        
+        // Show feature importance
+        var featureImportances = {{ initial_recommendations.feature_importances|tojson|safe }};
+        showFeatureImportance(featureImportances);
+        {% else %}
+        // Load feature recommendations
+        loadFeatureRecommendations();
+        {% endif %}
+    {% else %}
+        $('#geminiSuggestions').html('<div class="alert alert-warning">Please load data first</div>');
+        $('#featureSpinner').hide();
+        $('#availableFeatures').html('<div class="alert alert-warning">No data loaded</div>').show();
+    {% endif %}
     
     // Feature selection handling
     $(document).on('click', '.feature-item', function() {
@@ -283,11 +313,20 @@ $(document).ready(function() {
     });
 });
 
+function showGeminiSuggestions(suggestions) {
+    $('#geminiSpinner').hide();
+    if (typeof suggestions === 'string' && suggestions.startsWith('Error')) {
+        $('#geminiSuggestions').html('<div class="alert alert-danger">' + suggestions + '</div>').show();
+    } else {
+        $('#geminiSuggestions').html('<div class="alert alert-info">' + suggestions + '</div>').show();
+    }
+}
+
 function loadFeatureRecommendations() {
     $.get('/api/feature-recommendations', function(response) {
         if (response.success) {
             // Show Gemini suggestions
-            $('#geminiSuggestions').html(response.suggestions);
+            showGeminiSuggestions(response.raw_suggestions);
             
             // Create feature importance chart
             createFeatureImportanceChart(response.feature_importances);
@@ -300,9 +339,24 @@ function loadFeatureRecommendations() {
     });
 }
 
-function createFeatureImportanceChart(importances) {
-    // Implementation using your preferred charting library
-    // (e.g., Chart.js, Plotly, etc.)
+function showFeatureImportance(importances) {
+    $('#featureSpinner').hide();
+    var html = '<div class="list-group">';
+    importances.forEach(function(item) {
+        var importance = (item.importance * 100).toFixed(2);
+        html += `
+            <div class="list-group-item feature-item" data-feature="${item.feature}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${item.feature}</h6>
+                    <small>${importance}%</small>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: ${importance}%"></div>
+                </div>
+            </div>`;
+    });
+    html += '</div>';
+    $('#availableFeatures').html(html).show();
 }
 
 function loadFeatures(features) {
@@ -312,13 +366,15 @@ function loadFeatures(features) {
             <div class="list-group-item feature-item" data-feature="${feature.name}">
                 <div class="d-flex w-100 justify-content-between">
                     <h6 class="mb-1">${feature.name}</h6>
-                    <small>${feature.importance.toFixed(4)}</small>
+                    <small>${feature.importance ? feature.importance.toFixed(4) : ''}</small>
                 </div>
-                <small>${feature.description}</small>
+                <small class="text-muted">${feature.type || ''}</small>
+                ${feature.description ? `<br><small>${feature.description}</small>` : ''}
             </div>
         `;
     });
-    $('#availableFeatures').html(html);
+    $('#featureSpinner').hide();
+    $('#availableFeatures').html(html).show();
 }
 
 function updateSelectedFeatures() {
@@ -373,27 +429,86 @@ function trainModel() {
 
 function showTrainingResults(results) {
     $('#trainingResults').show();
-    $('#trainScore').text((results.train_score * 100).toFixed(2) + '%');
-    $('#testScore').text((results.test_score * 100).toFixed(2) + '%');
-    $('#cvScore').text((results.cv_mean * 100).toFixed(2) + '%');
-    $('#featureCount').text(results.n_features);
     
-    // Show classification report
-    showClassificationReport(results.classification_report);
-    
-    // Show confusion matrix
-    showConfusionMatrix(results.confusion_matrix);
+    // Display metrics
+    if (results.metrics) {
+        $('#trainScore').text((results.metrics.train_score * 100).toFixed(2) + '%');
+        $('#testScore').text((results.metrics.test_score * 100).toFixed(2) + '%');
+        $('#cvScore').text((results.metrics.cv_mean * 100).toFixed(2) + '%');
+        $('#featureCount').text(results.feature_importance.length);
+        
+        // Show classification report
+        showClassificationReport(results.metrics.classification_report);
+        
+        // Show confusion matrix
+        showConfusionMatrix(results.metrics.confusion_matrix);
+    } else {
+        console.error('Missing metrics in training results');
+        alert('Warning: Training completed but metrics are missing');
+    }
 }
 
 function showClassificationReport(report) {
-    var html = '<table class="table table-sm">';
-    // Add table content based on classification report
-    html += '</table>';
+    if (!report) return;
+    
+    var html = '<table class="table table-sm table-bordered">';
+    html += '<thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-score</th><th>Support</th></tr></thead>';
+    html += '<tbody>';
+    
+    // Add per-class metrics
+    for (let cls in report) {
+        if (cls !== 'accuracy' && cls !== 'macro avg' && cls !== 'weighted avg') {
+            html += `<tr>
+                <td>${cls}</td>
+                <td>${(report[cls].precision * 100).toFixed(2)}%</td>
+                <td>${(report[cls].recall * 100).toFixed(2)}%</td>
+                <td>${(report[cls].f1_score * 100).toFixed(2)}%</td>
+                <td>${report[cls].support}</td>
+            </tr>`;
+        }
+    }
+    
+    // Add accuracy
+    if (report.accuracy) {
+        html += `<tr class="table-info">
+            <td colspan="3"><strong>Accuracy</strong></td>
+            <td colspan="2">${(report.accuracy * 100).toFixed(2)}%</td>
+        </tr>`;
+    }
+    
+    html += '</tbody></table>';
     $('#classificationReport').html(html);
 }
 
 function showConfusionMatrix(matrix) {
-    // Implementation using your preferred visualization method
+    if (!matrix || !Array.isArray(matrix)) return;
+    
+    const total = matrix.reduce((sum, row) => sum + row.reduce((a, b) => a + b, 0), 0);
+    
+    var html = '<table class="table table-sm table-bordered text-center">';
+    html += '<thead><tr><th colspan="2" rowspan="2"></th><th colspan="2">Predicted</th></tr>';
+    html += '<tr><th>Negative</th><th>Positive</th></tr></thead>';
+    html += '<tbody>';
+    
+    // Add actual values rows
+    for (let i = 0; i < matrix.length; i++) {
+        html += '<tr>';
+        if (i === 0) {
+            html += '<th rowspan="2">Actual</th><th>Negative</th>';
+        } else {
+            html += '<th>Positive</th>';
+        }
+        
+        for (let j = 0; j < matrix[i].length; j++) {
+            const percentage = (matrix[i][j] / total * 100).toFixed(1);
+            const bgClass = i === j ? 'table-success' : 'table-danger';
+            html += `<td class="${bgClass}">${matrix[i][j]}<br><small>(${percentage}%)</small></td>`;
+        }
+        html += '</tr>';
+    }
+    
+    html += '</tbody></table>';
+    $('#confusionMatrix').html(html);
 }
 
 function tuneModel() {

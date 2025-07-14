@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import Tuple, Dict, Any
-from google.generativeai import GenerativeModel
+import google.generativeai as genai
+from config import ENABLE_GEMINI, GEMINI_API_KEY
 
 class DataHandler:
     def __init__(self, suggestion_score_threshold: float = 0.7):
@@ -12,7 +13,10 @@ class DataHandler:
             suggestion_score_threshold: Threshold for considering data as clean
         """
         self.suggestion_score_threshold = suggestion_score_threshold
-        self._gemini_model = GenerativeModel("gemini-2.5-flash")
+        self._gemini_model = None
+        if ENABLE_GEMINI:
+            genai.configure(api_key=GEMINI_API_KEY)
+            self._gemini_model = genai.GenerativeModel("gemini-2.5-flash")
     
     def handle_missing_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -58,13 +62,36 @@ class DataHandler:
         Returns:
             Dictionary containing feature engineering suggestions
         """
+        if not ENABLE_GEMINI:
+            return {
+                "raw_suggestions": "Feature suggestions using Gemini are not available. Please configure GEMINI_API_KEY first.",
+                "timestamp": pd.Timestamp.now()
+            }
+            
+        # Handle NaN values before analysis
+        data_clean = data_sample.copy()
+        
+        # For numeric columns, replace NaN with median
+        numeric_cols = data_clean.select_dtypes(include=['int64', 'float64']).columns
+        for col in numeric_cols:
+            if data_clean[col].isna().any():
+                data_clean[col].fillna(data_clean[col].median(), inplace=True)
+        
+        # For categorical columns, replace NaN with mode
+        cat_cols = data_clean.select_dtypes(include=['object']).columns
+        for col in cat_cols:
+            if data_clean[col].isna().any():
+                data_clean[col].fillna(data_clean[col].mode()[0], inplace=True)
+        
         # Prepare data description
         data_description = f"""
         Dataset Summary:
-        - Columns: {', '.join(data_sample.columns)}
-        - Numeric Features: {', '.join(data_sample.select_dtypes(include=['int64', 'float64']).columns)}
-        - Categorical Features: {', '.join(data_sample.select_dtypes(include=['object']).columns)}
-        - Sample Size: {len(data_sample)}
+        - Columns: {', '.join(data_clean.columns)}
+        - Numeric Features: {', '.join(data_clean.select_dtypes(include=['int64', 'float64']).columns)}
+        - Categorical Features: {', '.join(data_clean.select_dtypes(include=['object']).columns)}
+        - Sample Size: {len(data_clean)}
+        Missing Value Summary:
+        {', '.join([f'{col}: {data_sample[col].isna().sum()} NaN' for col in data_sample.columns if data_sample[col].isna().any()])}
         """
         
         # Query Gemini for suggestions
@@ -82,8 +109,11 @@ class DataHandler:
         Format the response as a structured dictionary.
         """
         
-        response = await self._gemini_model.generate_content(prompt)
-        suggestions = response.text
+        try:
+            response = await self._gemini_model.generate_content(prompt)
+            suggestions = response.text
+        except Exception as e:
+            suggestions = f"Error getting feature suggestions: {str(e)}"
         
         # Parse and structure the suggestions
         # Note: In a real implementation, you'd want to parse the response more robustly

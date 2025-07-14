@@ -211,8 +211,19 @@ class MLTrainingPipeline:
         print("Feature Engineering Suggestions:")
         print(suggestions['raw_suggestions'])
         
-        # Add suggestion scores based on data quality
-        X['suggestion_score'] = X.apply(lambda row: sum([1 for val in row if pd.notna(val)]) / len(row), axis=1)
+        # Add suggestion scores based on data quality with validation
+        row_scores = []
+        for _, row in X.iterrows():
+            valid_values = sum([1 for val in row if pd.notna(val)])
+            total_values = len(row)
+            score = valid_values / total_values if total_values > 0 else 0
+            row_scores.append(score)
+        X['suggestion_score'] = row_scores
+
+        # Verify no NaN values in suggestion scores
+        if X['suggestion_score'].isna().any():
+            print("Warning: NaN values detected in suggestion scores. Replacing with 0.")
+            X['suggestion_score'].fillna(0, inplace=True)
         
         # Use DataHandler for missing value imputation
         X = self.data_handler.handle_missing_data(X)
