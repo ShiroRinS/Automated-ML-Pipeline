@@ -331,6 +331,38 @@
 // Initialize recommendations data
 var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}null{% endif %};
 
+// Feature descriptions with detailed explanations
+const descriptions = {
+    'Sex': {
+        short: 'Passenger gender (male/female)',
+        full: 'Passenger gender, encoded as 1 for male and 0 for female. Strong predictor of survival as women were prioritized for rescue.'
+    },
+    'Fare': {
+        short: 'Ticket fare paid',
+        full: 'Ticket fare in pounds (£). Higher fares typically indicate first-class passengers and correlate with better cabins and deck positions.'
+    },
+    'Age': {
+        short: 'Age of passenger in years',
+        full: 'Passenger age in years. Children and elderly had different survival patterns. Contains ~20% missing values, imputed with median age.'
+    },
+    'Pclass': {
+        short: 'Passenger class (1st, 2nd, 3rd)',
+        full: 'Ticket class: 1 = First (Upper), 2 = Second (Middle), 3 = Third (Lower). Proxy for socio-economic status and deck level on ship.'
+    },
+    'SibSp': {
+        short: 'Number of siblings/spouses aboard',
+        full: 'Number of siblings and spouses aboard. Family size affected survival chances, with mid-sized family groups having better survival rates.'
+    },
+    'Parch': {
+        short: 'Number of parents/children aboard',
+        full: 'Number of parents and children aboard. Combined with SibSp gives total family size. Small children with parents had higher survival rates.'
+    },
+    'Embarked': {
+        short: 'Port of embarkation',
+        full: 'Port where passenger boarded: C = Cherbourg, Q = Queenstown, S = Southampton. May indicate passenger wealth and nationality.'
+    }
+};
+
 // Debug output
 console.log('Initial recommendations:', initial_recommendations);
 if (initial_recommendations && initial_recommendations.feature_importances) {
@@ -474,6 +506,9 @@ function showFeatureImportance(importances) {
     
     html += '</div>';
     $('#featureImportanceChart').html(html).show();
+    
+    // Initialize tooltips after adding elements to DOM
+    initTooltips();
 }
 
 function loadFeatures(features) {
@@ -507,37 +542,6 @@ function initTooltips() {
 }
 
 function loadFeaturesFromImportance(importances) {
-    // Feature descriptions with detailed explanations
-    const descriptions = {
-        'Sex': {
-            short: 'Passenger gender (male/female)',
-            full: 'Passenger gender, encoded as 1 for male and 0 for female. Strong predictor of survival as women were prioritized for rescue.'
-        },
-        'Fare': {
-            short: 'Ticket fare paid',
-            full: 'Ticket fare in pounds (£). Higher fares typically indicate first-class passengers and correlate with better cabins and deck positions.'
-        },
-        'Age': {
-            short: 'Age of passenger in years',
-            full: 'Passenger age in years. Children and elderly had different survival patterns. Contains ~20% missing values, imputed with median age.'
-        },
-        'Pclass': {
-            short: 'Passenger class (1st, 2nd, 3rd)',
-            full: 'Ticket class: 1 = First (Upper), 2 = Second (Middle), 3 = Third (Lower). Proxy for socio-economic status and deck level on ship.'
-        },
-        'SibSp': {
-            short: 'Number of siblings/spouses aboard',
-            full: 'Number of siblings and spouses aboard. Family size affected survival chances, with mid-sized family groups having better survival rates.'
-        },
-        'Parch': {
-            short: 'Number of parents/children aboard',
-            full: 'Number of parents and children aboard. Combined with SibSp gives total family size. Small children with parents had higher survival rates.'
-        },
-        'Embarked': {
-            short: 'Port of embarkation',
-            full: 'Port where passenger boarded: C = Cherbourg, Q = Queenstown, S = Southampton. May indicate passenger wealth and nationality.'
-        }
-    };
 
     var features = importances.map(item => ({
         name: item.feature,
