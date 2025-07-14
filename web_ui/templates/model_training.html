@@ -2,6 +2,13 @@
 
 {% block title %}Model Training{% endblock %}
 
+{% block head %}
+<!-- Include marked.js for markdown parsing -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Include custom suggestions script -->
+<script src="{{ url_for('static', filename='js/show_suggestions.js') }}"></script>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     {% if error %}
@@ -321,6 +328,14 @@
 
 <!-- Custom Scripts -->
 <script>
+// Initialize recommendations data
+var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}null{% endif %};
+
+// Debug output
+console.log('Initial recommendations:', initial_recommendations);
+if (initial_recommendations && initial_recommendations.feature_importances) {
+    console.log('Feature importances:', initial_recommendations.feature_importances);
+}
 $(document).ready(function() {
     {% if data_loaded %}
         {% if initial_recommendations %}
@@ -329,7 +344,7 @@ $(document).ready(function() {
         
         // Show feature importance
         var featureImportances = {{ initial_recommendations.feature_importances|tojson|safe }};
-        showFeatureImportance(featureImportances);
+        createFeatureImportanceChart(featureImportances);
         {% else %}
         // Load feature recommendations
         loadFeatureRecommendations();

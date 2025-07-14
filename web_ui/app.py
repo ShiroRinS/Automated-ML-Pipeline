@@ -74,6 +74,7 @@ async def train_model():
             print("Getting feature recommendations...")
             recommendations = await feature_recommender.get_recommendations(data)
             print("Got feature recommendations")
+            print(f"Feature importance scores: {recommendations.get('feature_importances', [])}")
             
             # Ensure recommendations is serializable
             safe_recommendations = {
@@ -81,6 +82,7 @@ async def train_model():
                 'feature_importances': recommendations.get('feature_importances', []),
                 'timestamp': str(recommendations.get('timestamp', ''))
             }
+            print(f"Safe recommendations being passed to template: {safe_recommendations}")
             
             return await render_template('model_training.html', 
                                     initial_recommendations=safe_recommendations,
