@@ -151,39 +151,81 @@ class FeatureRecommender:
                 """
                 
                 prompt = f"""
-                Based on the dataset analysis below, provide concise feature recommendations:
+Analyze the dataset below and provide feature recommendations in a structured format.
 
-                {data_description}
+{data_description}
 
-                Format your response as follows:
+IMPORTANT: First generate a JSON structure exactly like this example, then I will ask you to convert it to markdown.
+Replace the example insights with relevant ones for the Titanic dataset while keeping the exact structure:
 
-                ### 🎯 Recommended Features (Most Important First)
-                - **Feature Name**: Brief explanation of importance/impact on survival
+{{
+    "recommended_features": [
+        {{
+            "name": "Sex",
+            "importance": "Primary factor in survival predictions",
+            "reason": "Clear gender-based survival patterns evident in the data"
+        }},
+        {{
+            "name": "Fare",
+            "importance": "Strong predictor",
+            "reason": "Higher fares correlate with better survival chances"
+        }},
+        // Add more features in order of importance
+    ],
+    "selection_tips": [
+        "Combine demographic features (Sex, Age) with socioeconomic indicators",
+        "Consider interaction between family size features",
+        "Prioritize features with low missing value rates"
+    ],
+    "important_considerations": [
+        "Handle missing Age values with appropriate imputation",
+        "Watch for correlations between Pclass and Fare",
+        "Ensure proper encoding of categorical variables"
+    ]
+}}
 
-                ### 💡 Feature Selection Tips
-                - Quick tips for selecting the most effective feature combinations
-                - Focus on feature interactions that boost prediction accuracy
+Now, convert your JSON response into this exact markdown format:
 
-                ### ⚠️ Important Considerations
-                - Key points about data quality and feature relationships
-                - Any specific warnings or recommendations for better results
+### 🎯 Recommended Features (Most Important First)
+- **[Feature Name]**: [Importance and reason combined in one line]
 
-                Keep the response concise and focused on practical feature selection advice for our ML pipeline. Use markdown formatting (bold, bullets, etc.) for better readability.
-                """
+### 💡 Feature Selection Tips
+- [Each tip on a new line]
+
+### ⚠️ Important Considerations
+- [Each consideration on a new line]
+
+Ensure your response includes all three sections with exact headings and emojis. The content should be relevant to the Titanic dataset.
+"""
                 
-                try:
-                    print("Making Gemini API call...")
-                    response = self._gemini_model.generate_content(prompt, generation_config={
-                        "temperature": 0.3,
-                        "top_p": 0.8,
-                        "top_k": 40
-                    })
-                    print("Got Gemini response")
-                    suggestions = response.text
-                    print("Extracted suggestion text")
-                except Exception as e:
-                    print(f"Gemini API error: {str(e)}")
-                    suggestions = f"Error getting Gemini suggestions: {str(e)}"
+            try:
+                print("Making Gemini API call...")
+                response = self._gemini_model.generate_content(prompt, generation_config={
+                    "temperature": 0.1,  # Lower temperature for more deterministic output
+                    "top_p": 0.95,      # Higher top_p to ensure we get complete sections
+                    "top_k": 40,
+                    "max_output_tokens": 2048,  # Increased to ensure we get complete output
+                    "stop_sequences": ["\n\n\n"]  # Stop at triple newlines to better handle markdown
+                })
+                print("Got Gemini response")
+                suggestions = response.text
+                print(f"Suggestion text length: {len(suggestions)}")
+                
+                # Validate the response has all required sections
+                required_sections = ['### 🎯 Recommended Features', '### 💡 Feature Selection Tips', '### ⚠️ Important Considerations']
+                for section in required_sections:
+                    if section not in suggestions:
+                        raise ValueError(f"Missing required section: {section}")
+
+                print("Validated suggestion text format")
+            except Exception as e:
+                print(f"Gemini API error: {str(e)}")
+                suggestions = (
+                    "Error getting Gemini suggestions. Please ensure the API response "
+                    "includes ### 🎯 Recommended Features, ### 💡 Feature Selection Tips, "
+                    "and ### ⚠️ Important Considerations sections. Error details: "
+                    f"{str(e)}"
+                )
             else:
                 suggestions = "Gemini suggestions not available. Please configure GEMINI_API_KEY."
             

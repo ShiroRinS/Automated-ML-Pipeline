@@ -47,6 +47,14 @@
                             <h6 class="mb-0">Feature Importance Analysis</h6>
                         </div>
                         <div class="card-body">
+                            <div class="alert alert-info mb-3">
+                                <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Feature Importance Guide</h6>
+                                <p class="mb-0" style="font-size: 0.9em;">
+                                    Percentages show each feature's relative importance in predicting survival, calculated using Random Forest with Gini impurity reduction.
+                                    Higher percentages indicate stronger predictive power.
+                                    <br><small class="text-muted mt-1 d-block">Click on a feature's bar to add it to your selection.</small>
+                                </p>
+                            </div>
                             <div id="featureImportanceChart"></div>
                         </div>
                     </div>
@@ -62,34 +70,19 @@
         </div>
         <div class="card-body">
             <div class="row">
-                <div class="col-md-6">
-                    <!-- Available Features -->
-                    <div class="card">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Available Features</h6>
-                        </div>
-                        <div class="card-body">
-                            <div id="featureSpinner" class="text-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="sr-only">Loading features...</span>
-                                </div>
-                                <p class="mt-2">Loading available features...</p>
-                            </div>
-                            <div class="list-group" id="availableFeatures" style="display: none;">
-                                <!-- Features will be added here -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
+                <div class="col-12">
                     <!-- Selected Features -->
                     <div class="card">
-                        <div class="card-header bg-light">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
                             <h6 class="mb-0">Selected Features</h6>
+                            <span class="badge bg-primary" id="selectedCount">0 selected</span>
                         </div>
                         <div class="card-body">
-                            <div class="list-group" id="selectedFeatures">
+                            <div id="selectedFeatures" class="d-flex flex-wrap gap-2">
                                 <!-- Selected features will be shown here -->
+                            </div>
+                            <div id="noFeaturesSelected" class="alert alert-warning mt-3" style="display: none;">
+                                No features selected. Click on features in the importance chart above to select them for training.
                             </div>
                         </div>
                     </div>
@@ -258,12 +251,16 @@
 .feature-item {
     cursor: pointer;
     user-select: none;
+    transition: all 0.2s ease;
 }
 .feature-item:hover {
     background-color: #f8f9fa;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 .feature-item.selected {
-    background-color: #e9ecef;
+    background-color: #e7f0ff;
+    border-left: 3px solid #0d6efd;
 }
 
 /* Markdown Content Styling */
@@ -339,12 +336,24 @@ if (initial_recommendations && initial_recommendations.feature_importances) {
 $(document).ready(function() {
     {% if data_loaded %}
         {% if initial_recommendations %}
-        // Display initial recommendations
-        showGeminiSuggestions({{ initial_recommendations.raw_suggestions|tojson|safe }});
+        console.log('Processing initial recommendations');
+        if (initial_recommendations.raw_suggestions) {
+            showGeminiSuggestions(initial_recommendations.raw_suggestions);
+        } else {
+            $('#geminiSuggestions').html('<div class="alert alert-warning">No feature recommendations available.</div>').show();
+        }
         
         // Show feature importance
-        var featureImportances = {{ initial_recommendations.feature_importances|tojson|safe }};
-        createFeatureImportanceChart(featureImportances);
+        if (initial_recommendations.feature_importances && initial_recommendations.feature_importances.length > 0) {
+            console.log('Displaying feature importance for:', initial_recommendations.feature_importances);
+            showFeatureImportance(initial_recommendations.feature_importances);
+            
+            // Also populate available features from importance scores
+            loadFeaturesFromImportance(initial_recommendations.feature_importances);
+        } else {
+            console.log('No feature importance data available');
+            $('#featureImportanceChart').html('<div class="alert alert-warning">No feature importance data available. Please ensure the model has been trained.</div>');
+        }
         {% else %}
         // Load feature recommendations
         loadFeatureRecommendations();
@@ -355,11 +364,15 @@ $(document).ready(function() {
         $('#availableFeatures').html('<div class="alert alert-warning">No data loaded</div>').show();
     {% endif %}
     
-    // Feature selection handling
-    $(document).on('click', '.feature-item', function() {
+// Feature selection handling
+    $(document).on('click', '.feature-item', function(e) {
+        // Toggle selection
         $(this).toggleClass('selected');
         updateSelectedFeatures();
     });
+    
+    // Initialize selected features count
+    updateSelectedFeatures();
     
     // Test size slider
     $('#testSize').on('input', function() {
@@ -390,16 +403,23 @@ $(document).ready(function() {
 function showGeminiSuggestions(suggestions) {
     $('#geminiSpinner').hide();
     if (typeof suggestions === 'string' && suggestions.startsWith('Error')) {
-        $('#geminiSuggestions').html('<div class="alert alert-danger">' + suggestions + '</div>').show();
+        const errorMsg = suggestions.includes('Missing required section') ?
+            'The feature recommendations system is temporarily unavailable. Please proceed with the feature importance scores below.' :
+            suggestions;
+        $('#geminiSuggestions').html('<div class="alert alert-warning">' + errorMsg + '</div>').show();
     } else {
-        // Parse markdown to HTML
-        const htmlContent = marked.parse(suggestions);
-        
-        $('#geminiSuggestions').html(`
-            <div class="alert alert-info markdown-content">
-                ${htmlContent}
-            </div>
-        `).show();
+        try {
+            // Parse markdown to HTML
+            const htmlContent = marked.parse(suggestions);
+            $('#geminiSuggestions').html(`
+                <div class="alert alert-info markdown-content">
+                    ${htmlContent}
+                </div>
+            `).show();
+        } catch (e) {
+            console.error('Error parsing markdown:', e);
+            $('#geminiSuggestions').html('<div class="alert alert-warning">Error displaying recommendations. Please use the feature importance scores below.</div>').show();
+        }
     }
 }
 
@@ -409,8 +429,8 @@ function loadFeatureRecommendations() {
             // Show Gemini suggestions
             showGeminiSuggestions(response.raw_suggestions);
             
-            // Create feature importance chart
-            createFeatureImportanceChart(response.feature_importances);
+            // Show feature importance
+            showFeatureImportance(response.feature_importances);
             
             // Load available features
             loadFeatures(response.features);
@@ -422,18 +442,7 @@ function loadFeatureRecommendations() {
 
 function showFeatureImportance(importances) {
     $('#featureSpinner').hide();
-    
-    // Add an explanation at the top
-    var html = `
-        <div class="alert alert-info mb-3">
-            <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Feature Importance Guide</h6>
-            <p class="mb-0" style="font-size: 0.9em;">
-                Percentages show each feature's relative importance in predicting survival, calculated using Random Forest (100 trees, random_state=42) with Gini impurity reduction.
-                Higher percentages indicate stronger predictive power. These scores are based on how much each feature helps in making accurate predictions.
-                <br><small class="text-muted mt-1 d-block">Model: RandomForestClassifier(n_estimators=100, random_state=42)</small>
-            </p>
-        </div>
-        <div class="list-group">`;
+    var html = '<div class="list-group">';
     
     // Sort features by importance
     importances.sort((a, b) => b.importance - a.importance);
@@ -442,7 +451,7 @@ function showFeatureImportance(importances) {
     importances.forEach(function(item) {
         var importance = (item.importance * 100).toFixed(2);
         html += `
-            <div class="list-group-item feature-item" data-feature="${item.feature}">
+            <div class="list-group-item feature-item" data-feature="${item.feature}" data-importance="${item.importance}">
                 <div class="d-flex w-100 justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-1">${item.feature}</h6>
@@ -460,50 +469,99 @@ function showFeatureImportance(importances) {
     });
     
     html += '</div>';
-    $('#availableFeatures').html(html).show();
+    $('#featureImportanceChart').html(html).show();
 }
 
 function loadFeatures(features) {
     var html = '';
     features.forEach(function(feature) {
-        html += `
-            <div class="list-group-item feature-item" data-feature="${feature.name}">
+html += `
+            <div class="list-group-item feature-item" data-feature="${feature.name}" data-importance="${feature.importance || 0}">
                 <div class="d-flex w-100 justify-content-between">
                     <h6 class="mb-1">${feature.name}</h6>
                     <small>${feature.importance ? feature.importance.toFixed(4) : ''}</small>
                 </div>
-                <small class="text-muted">${feature.type || ''}</small>
-                ${feature.description ? `<br><small>${feature.description}</small>` : ''}
+                <small class="text-muted">${feature.type || 'No description available'}</small>
             </div>
         `;
     });
+    if (html === '') {
+        html = 'div class="alert alert-info"No available features to display./div';
+    }
     $('#featureSpinner').hide();
     $('#availableFeatures').html(html).show();
+}
+
+function loadFeaturesFromImportance(importances) {
+    // Feature descriptions
+    const descriptions = {
+        'Sex': 'Passenger gender (male/female)',
+        'Fare': 'Ticket fare paid',
+        'Age': 'Age of passenger in years',
+        'Pclass': 'Passenger class (1st, 2nd, 3rd)',
+        'SibSp': 'Number of siblings/spouses aboard',
+        'Parch': 'Number of parents/children aboard',
+        'Embarked': 'Port of embarkation (C=Cherbourg, Q=Queenstown, S=Southampton)'
+    };
+
+    var features = importances.map(item => ({
+        name: item.feature,
+        importance: item.importance,
+        type: descriptions[item.feature] || 'No description available'
+    }));
+
+    loadFeatures(features);
 }
 
 function updateSelectedFeatures() {
     var selected = [];
     $('.feature-item.selected').each(function() {
-        selected.push($(this).data('feature'));
+        selected.push({
+            name: $(this).data('feature'),
+            importance: parseFloat($(this).data('importance'))
+        });
     });
+    
+    // Sort by importance
+    selected.sort((a, b) => b.importance - a.importance);
+    
+    // Update UI
     updateSelectedFeaturesList(selected);
+    $('#selectedCount').text(`${selected.length} selected`);
+    
+    // Show/hide no features message
+    if (selected.length === 0) {
+        $('#noFeaturesSelected').show();
+    } else {
+        $('#noFeaturesSelected').hide();
+    }
 }
 
 function updateSelectedFeaturesList(features) {
     var html = '';
     features.forEach(function(feature) {
+        const importance = (feature.importance * 100).toFixed(2);
         html += `
-            <div class="list-group-item">
-                ${feature}
+            <div class="badge bg-primary p-2 d-flex align-items-center">
+                <span>${feature.name}</span>
+                <small class="ms-2 opacity-75">${importance}%</small>
+                <button type="button" class="btn-close btn-close-white ms-2" 
+                    data-feature="${feature.name}" 
+                    onclick="deselectFeature('${feature.name}')"></button>
             </div>
         `;
     });
-    $('#selectedFeatures').html(html);
+    $('#selectedFeatures').html(html || '');
+}
+
+function deselectFeature(featureName) {
+    $(`.list-group-item:contains('${featureName}')`).removeClass('selected');
+    updateSelectedFeatures();
 }
 
 function trainModel() {
-    var selectedFeatures = $('.feature-item.selected').map(function() {
-        return $(this).data('feature');
+    var selectedFeatures = $('.list-group-item.selected h6').map(function() {
+        return $(this).text();
     }).get();
     
     var testSize = $('#testSize').val() / 100;
