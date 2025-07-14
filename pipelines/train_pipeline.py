@@ -19,7 +19,9 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class MLTrainingPipeline:
-    def __init__(self, data_path="training/data/titanic.csv", artifacts_dir="training/artifacts", logs_dir="training/logs"):
+    def __init__(self, data_path=None, artifacts_dir="training/artifacts", logs_dir="training/logs"):
+        if data_path is None:
+            raise ValueError("data_path must be provided")
         self.data_path = data_path
         self.artifacts_dir = Path(artifacts_dir)
         self.logs_dir = Path(logs_dir)

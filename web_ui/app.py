@@ -60,8 +60,17 @@ async def train_model():
     try:
         print("Loading training page...")
         
-        # Load initial data
-        data_path = TRAINING_DIR / 'data' / 'titanic.csv'
+        # Load data from the designated data directory
+        data_path = TRAINING_DIR / "data"
+        csv_files = list(data_path.glob("*.csv"))
+        
+        if not csv_files:
+            return await render_template('model_training.html',
+                                error="No CSV files found in the training data directory.",
+                                data_loaded=False)
+        
+        # Use the most recently modified CSV file
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
         print(f"Looking for data at: {data_path}")
         print(f"Data file exists: {data_path.exists()}")
         
@@ -535,8 +544,12 @@ def get_available_features():
     print("Request received for features")
     try:
         print("1. Loading features...")
-        # Load data only once and cache it
-        data_path = TRAINING_DIR / "data" / "titanic.csv"
+        # Find the most recent CSV file in the data directory
+        data_path = TRAINING_DIR / "data"
+        csv_files = list(data_path.glob("*.csv"))
+        if not csv_files:
+            raise FileNotFoundError("No CSV files found in training data directory")
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
         print(f"2. Data path: {data_path}")
         print(f"3. Data path exists: {data_path.exists()}")
         
