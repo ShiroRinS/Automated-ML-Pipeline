@@ -151,17 +151,24 @@ class FeatureRecommender:
                 """
                 
                 prompt = f"""
-                Based on the Titanic dataset description below, suggest the most important features and potential feature engineering steps for survival prediction:
-                
+                Based on the dataset analysis below, provide concise feature recommendations:
+
                 {data_description}
-                
-                Please provide recommendations for:
-                1. Which features are likely most important for survival prediction?
-                2. Suggested feature transformations or combinations
-                3. Any additional features that could be created
-                4. Handling of missing values
-                
-                Format your response as a clear, bulleted list.
+
+                Format your response as follows:
+
+                ### 🎯 Recommended Features (Most Important First)
+                - **Feature Name**: Brief explanation of importance/impact on survival
+
+                ### 💡 Feature Selection Tips
+                - Quick tips for selecting the most effective feature combinations
+                - Focus on feature interactions that boost prediction accuracy
+
+                ### ⚠️ Important Considerations
+                - Key points about data quality and feature relationships
+                - Any specific warnings or recommendations for better results
+
+                Keep the response concise and focused on practical feature selection advice for our ML pipeline. Use markdown formatting (bold, bullets, etc.) for better readability.
                 """
                 
                 try:
