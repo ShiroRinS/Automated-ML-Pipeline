@@ -3,11 +3,30 @@
 {% block title %}Model Training{% endblock %}
 
 {% block head %}
+<!-- Include jQuery first -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <!-- Include marked.js for markdown parsing -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <!-- Include Bootstrap tooltips -->
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
+
+<!-- Initialize required variables -->
+<script>
+// Initialize data analysis and recommendations
+var data_analysis = {% if data_analysis %}{{ data_analysis|tojson|safe }}{% else %}null{% endif %};
+var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}null{% endif %};
+    
+    // Debug flag
+    var DEBUG = true;
+    
+    // Log data analysis if available
+    if (DEBUG) {
+        console.log('Data Analysis:', data_analysis);
+    }
+</script>
+
 <!-- Include custom suggestions script -->
 <script src="{{ url_for('static', filename='js/show_suggestions.js') }}"></script>
 {% endblock %}
@@ -19,46 +38,92 @@
         {{ error }}
     </div>
     {% endif %}
-    <!-- Feature Recommendations Section -->
+    
+    <!-- Data Summary Section -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Dataset Overview</h5>
+            <span class="badge bg-primary" id="datasetSize"></span>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <!-- Basic Stats -->
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Basic Statistics</h6>
+                        </div>
+                        <div class="card-body" id="basicStats">
+                            <!-- Basic stats will be populated here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <!-- Column Types -->
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Column Types</h6>
+                        </div>
+                        <div class="card-body" id="columnTypes">
+                            <!-- Column types will be populated here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <!-- Data Quality -->
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Data Quality</h6>
+                        </div>
+                        <div class="card-body" id="dataQuality">
+                            <!-- Data quality info will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Feature Selection Section -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0">Feature Recommendations</h5>
+            <h5 class="mb-0">Feature Selection</h5>
         </div>
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <!-- Gemini Suggestions -->
+                    <!-- Available Features -->
                     <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Gemini 2.5-flash Suggestions</h6>
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Available Features</h6>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" id="showNumeric">Numeric</button>
+                                <button type="button" class="btn btn-outline-primary" id="showCategorical">Categorical</button>
+                                <button type="button" class="btn btn-outline-primary" id="showAll">All</button>
+                            </div>
                         </div>
                         <div class="card-body">
-                            <div id="geminiSpinner" class="text-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="sr-only">Loading suggestions...</span>
-                                </div>
-                                <p class="mt-2">Getting feature recommendations...</p>
+                            <div id="availableFeatures" class="list-group list-group-flush">
+                                <!-- Available features will be populated here -->
                             </div>
-                            <div id="geminiSuggestions" style="display: none;">Loading suggestions...</div>
                         </div>
                     </div>
                 </div>
+                
                 <div class="col-md-6">
-                    <!-- Feature Importance -->
+                    <!-- Selected Features -->
                     <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Feature Importance Analysis</h6>
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Selected Features</h6>
+                            <span class="badge bg-primary" id="selectedCount">0 selected</span>
                         </div>
                         <div class="card-body">
-                            <div class="alert alert-info mb-3">
-                                <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Feature Importance Guide</h6>
-                                <p class="mb-0" style="font-size: 0.9em;">
-                                    Percentages show each feature's relative importance in predicting survival, calculated using Random Forest with Gini impurity reduction.
-                                    Higher percentages indicate stronger predictive power.
-                                    <br><small class="text-muted mt-1 d-block">Click on a feature's bar to add it to your selection.</small>
-                                </p>
+                            <div id="selectedFeatures" class="d-flex flex-wrap gap-2">
+                                <!-- Selected features will be shown here -->
                             </div>
-                            <div id="featureImportanceChart"></div>
+                            <div id="noFeaturesSelected" class="alert alert-info mt-3">
+                                Select features from the available list to begin training.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -328,43 +393,44 @@
 
 <!-- Custom Scripts -->
 <script>
-// Initialize recommendations data
-var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}null{% endif %};
+// Initialize data analysis
+var data_analysis = {% if data_analysis %}{{ data_analysis|tojson|safe }}{% else %}null{% endif %};
+var selected_features = [];
+var target_column = null;
+var excluded_columns = [];
 
 // Dynamic feature descriptions
 let descriptions = {};
 
+// Initialize recommendations if not already defined
+if (typeof initial_recommendations === 'undefined') {
+    var initial_recommendations = null;
+}
+
 // Debug output
-console.log('Initial recommendations:', initial_recommendations);
+console.log('Initial recommendations:', initial_recommendations || 'not defined');
+
+// Check recommendations safely
 if (initial_recommendations && initial_recommendations.feature_importances) {
     console.log('Feature importances:', initial_recommendations.feature_importances);
 }
 $(document).ready(function() {
-    {% if data_loaded %}
-        {% if initial_recommendations %}
-        console.log('Processing initial recommendations');
-        if (initial_recommendations.raw_suggestions) {
-            showGeminiSuggestions(initial_recommendations.raw_suggestions);
-        } else {
-            $('#geminiSuggestions').html('<div class="alert alert-warning">No feature recommendations available.</div>').show();
-        }
+    {% if data_loaded and data_analysis %}
+        console.log('Processing data analysis:', data_analysis);
         
-        // Show feature importance
-        if (initial_recommendations.feature_importances && initial_recommendations.feature_importances.length > 0) {
-            console.log('Displaying feature importance for:', initial_recommendations.feature_importances);
-showFeatureImportance(initial_recommendations.feature_importances);
-initTooltips();
-            
-            // Also populate available features from importance scores
-            loadFeaturesFromImportance(initial_recommendations.feature_importances);
-        } else {
-            console.log('No feature importance data available');
-            $('#featureImportanceChart').html('<div class="alert alert-warning">No feature importance data available. Please ensure the model has been trained.</div>');
+        // Show data summary
+        showDataSummary(data_analysis);
+        
+        // Show available features
+        showAvailableFeatures(data_analysis);
+        
+        // Initialize feature selection
+        initializeFeatureSelection();
+        
+        // Show target column selection if needed
+        if (!target_column) {
+            showTargetColumnSelection(data_analysis);
         }
-        {% else %}
-        // Load feature recommendations
-        loadFeatureRecommendations();
-        {% endif %}
     {% else %}
         $('#geminiSuggestions').html('<div class="alert alert-warning">Please load data first</div>');
         $('#featureSpinner').hide();
@@ -407,44 +473,119 @@ initTooltips();
     });
 });
 
-function showGeminiSuggestions(suggestions) {
-    $('#geminiSpinner').hide();
-    if (typeof suggestions === 'string' && suggestions.startsWith('Error')) {
-        const errorMsg = suggestions.includes('Missing required section') ?
-            'The feature recommendations system is temporarily unavailable. Please proceed with the feature importance scores below.' :
-            suggestions;
-        $('#geminiSuggestions').html('<div class="alert alert-warning">' + errorMsg + '</div>').show();
-    } else {
-        try {
-            // Parse markdown to HTML
-            const htmlContent = marked.parse(suggestions);
-            $('#geminiSuggestions').html(`
-                <div class="alert alert-info markdown-content">
-                    ${htmlContent}
+function showDataSummary(analysis) {
+    // Update dataset size badge
+    $('#datasetSize').text(`${analysis.total_rows} rows × ${analysis.total_columns} columns`);
+    
+    // Show basic statistics
+    let basicStatsHtml = `
+        <ul class="list-unstyled mb-0">
+            <li><strong>Total Features:</strong> ${analysis.column_info.numeric.length + analysis.column_info.categorical.length}</li>
+            <li><strong>Numeric Features:</strong> ${analysis.column_info.numeric.length}</li>
+            <li><strong>Categorical Features:</strong> ${analysis.column_info.categorical.length}</li>
+            <li><strong>Excluded Columns:</strong> ${analysis.column_info.excluded.length}</li>
+        </ul>
+    `;
+    $('#basicStats').html(basicStatsHtml);
+    
+    // Show column types
+    let columnTypesHtml = '<div class="list-group list-group-flush">';
+    
+    // Add numeric columns
+    analysis.column_info.numeric.forEach(col => {
+        const stats = analysis.numeric_stats[col];
+        columnTypesHtml += `
+            <div class="list-group-item">
+                <h6 class="mb-1">${col}</h6>
+                <small class="text-muted">Numeric | Range: ${stats.min} to ${stats.max}</small>
+            </div>
+        `;
+    });
+    
+    // Add categorical columns
+    analysis.column_info.categorical.forEach(col => {
+        const stats = analysis.categorical_stats[col];
+        columnTypesHtml += `
+            <div class="list-group-item">
+                <h6 class="mb-1">${col}</h6>
+                <small class="text-muted">Categorical | ${stats.unique_values} unique values</small>
+            </div>
+        `;
+    });
+    
+    columnTypesHtml += '</div>';
+    $('#columnTypes').html(columnTypesHtml);
+    
+    // Show data quality
+    let qualityHtml = '<div class="list-group list-group-flush">';
+    
+    // Add missing value information
+    const totalMissing = analysis.total_rows * analysis.total_columns;
+    const missingPct = ((analysis.missing_values_total / totalMissing) * 100).toFixed(2);
+    
+    qualityHtml += `
+        <div class="list-group-item">
+            <h6 class="mb-1">Missing Values</h6>
+            <div class="progress" style="height: 5px;">
+                <div class="progress-bar bg-warning" style="width: ${missingPct}%"></div>
+            </div>
+            <small class="text-muted">${analysis.missing_values_total} cells (${missingPct}%)</small>
+        </div>
+    `;
+    
+    // Add column specific quality info
+    [...analysis.column_info.numeric, ...analysis.column_info.categorical].forEach(col => {
+        const stats = analysis.numeric_stats[col] || analysis.categorical_stats[col];
+        if (stats.missing_pct > 0) {
+            qualityHtml += `
+                <div class="list-group-item">
+                    <small class="text-muted">${col}: ${stats.missing_pct.toFixed(1)}% missing</small>
                 </div>
-            `).show();
-        } catch (e) {
-            console.error('Error parsing markdown:', e);
-            $('#geminiSuggestions').html('<div class="alert alert-warning">Error displaying recommendations. Please use the feature importance scores below.</div>').show();
-        }
-    }
-}
-
-function loadFeatureRecommendations() {
-    $.get('/api/feature-recommendations', function(response) {
-        if (response.success) {
-            // Show Gemini suggestions
-            showGeminiSuggestions(response.raw_suggestions);
-            
-            // Show feature importance
-            showFeatureImportance(response.feature_importances);
-            
-            // Load available features
-            loadFeatures(response.features);
-        } else {
-            alert('Error loading recommendations: ' + response.error);
+            `;
         }
     });
+    
+    qualityHtml += '</div>';
+    $('#dataQuality').html(qualityHtml);
+}
+
+function showAvailableFeatures(analysis) {
+    let html = '';
+    
+    // Add numeric features
+    analysis.column_info.numeric.forEach(col => {
+        const stats = analysis.numeric_stats[col];
+        html += `
+            <div class="list-group-item feature-item" data-type="numeric" data-feature="${col}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${col}</h6>
+                    <span class="badge bg-primary">Numeric</span>
+                </div>
+                <p class="mb-1 small">Range: ${stats.min} to ${stats.max}</p>
+                <small class="text-muted">Mean: ${stats.mean.toFixed(2)} | Std: ${stats.std.toFixed(2)}</small>
+            </div>
+        `;
+    });
+    
+    // Add categorical features
+    analysis.column_info.categorical.forEach(col => {
+        const stats = analysis.categorical_stats[col];
+        html += `
+            <div class="list-group-item feature-item" data-type="categorical" data-feature="${col}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${col}</h6>
+                    <span class="badge bg-success">Categorical</span>
+                </div>
+                <p class="mb-1 small">${stats.unique_values} unique values</p>
+                <small class="text-muted">Most common: ${stats.most_common} (${stats.most_common_pct.toFixed(1)}%)</small>
+            </div>
+        `;
+    });
+    
+    $('#availableFeatures').html(html);
+    
+    // Initialize feature filtering
+    initializeFeatureFiltering();
 }
 
 function showFeatureImportance(importances) {
@@ -482,26 +623,32 @@ function showFeatureImportance(importances) {
     initTooltips();
 }
 
-function loadFeatures(features) {
-    // Generate feature descriptions first
-    generateFeatureDescriptions(features);
-    var html = '';
-    features.forEach(function(feature) {
-html += `
-            <div class="list-group-item feature-item" data-feature="${feature.name}" data-importance="${feature.importance || 0}">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">${feature.name}</h6>
-                    <small>${feature.importance ? feature.importance.toFixed(4) : ''}</small>
-                </div>
-                <small class="text-muted">${feature.type || 'No description available'}</small>
-            </div>
-        `;
+function initializeFeatureFiltering() {
+    // Show numeric features only
+    $('#showNumeric').click(function() {
+        $('.feature-item').hide();
+        $('.feature-item[data-type="numeric"]').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
     });
-    if (html === '') {
-        html = 'div class="alert alert-info"No available features to display./div';
-    }
-    $('#featureSpinner').hide();
-    $('#availableFeatures').html(html).show();
+    
+    // Show categorical features only
+    $('#showCategorical').click(function() {
+        $('.feature-item').hide();
+        $('.feature-item[data-type="categorical"]').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
+    });
+    
+    // Show all features
+    $('#showAll').click(function() {
+        $('.feature-item').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
+    });
+    
+    // Initially show all features and highlight the 'All' button
+    $('#showAll').addClass('active');
 }
 
 function initTooltips() {
@@ -600,9 +747,19 @@ function deselectFeature(featureName) {
 }
 
 function trainModel() {
-    var selectedFeatures = $('.list-group-item.selected h6').map(function() {
-        return $(this).text();
+    var selectedFeatures = $('.feature-item.selected').map(function() {
+        return $(this).data('feature');
     }).get();
+    
+    if (!target_column) {
+        alert('Please select a target variable first');
+        return;
+    }
+    
+    if (selectedFeatures.length === 0) {
+        alert('Please select at least one feature');
+        return;
+    }
     
     var testSize = $('#testSize').val() / 100;
     
@@ -612,7 +769,10 @@ function trainModel() {
         contentType: 'application/json',
         data: JSON.stringify({
             features: selectedFeatures,
-            test_size: testSize
+            test_size: testSize,
+            target_column: target_column,
+            excluded_columns: excluded_columns,
+            categorical_encoding: buildCategoricalEncodingConfig()
         }),
         success: function(response) {
             if (response.success) {
@@ -737,25 +897,101 @@ function tuneModel() {
     });
 }
 
-function showTuningResults(results) {
-    $('#tuningResults').show();
+function showTargetColumnSelection(analysis) {
+    let modalHtml = `
+        <div class="modal fade" id="targetColumnModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Select Target Variable</h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            Select the column you want to predict. This will be your target variable.
+                        </div>
+                        <select class="form-select" id="targetColumnSelect">
+                            <option value="">Choose target variable...</option>
+    `;
     
-    // Show best parameters
-    var paramsHtml = '<ul class="list-unstyled">';
-    Object.entries(results.best_params).forEach(([param, value]) => {
-        paramsHtml += `<li><strong>${param}:</strong> ${value}</li>`;
-    });
-    paramsHtml += '</ul>';
-    $('#bestParams').html(paramsHtml);
+    // Add numeric columns
+    if (analysis.column_info.numeric.length > 0) {
+        modalHtml += '<optgroup label="Numeric Columns">';
+        analysis.column_info.numeric.forEach(col => {
+            modalHtml += `<option value="${col}">${col}</option>`;
+        });
+        modalHtml += '</optgroup>';
+    }
     
-    // Show performance improvement
-    var improvementHtml = `
-        <div class="text-center">
-            <h3>${(results.improvement * 100).toFixed(2)}%</h3>
-            <p>Performance Improvement</p>
+    // Add categorical columns
+    if (analysis.column_info.categorical.length > 0) {
+        modalHtml += '<optgroup label="Categorical Columns">';
+        analysis.column_info.categorical.forEach(col => {
+            modalHtml += `<option value="${col}">${col}</option>`;
+        });
+        modalHtml += '</optgroup>';
+    }
+    
+    modalHtml += `
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="confirmTargetBtn">Confirm</button>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
-    $('#performanceImprovement').html(improvementHtml);
+    
+    // Add modal to body
+    $('body').append(modalHtml);
+    
+    // Show modal
+    $('#targetColumnModal').modal('show');
+    
+    // Handle target selection
+    $('#confirmTargetBtn').click(function() {
+        target_column = $('#targetColumnSelect').val();
+        if (target_column) {
+            // Remove target from available features
+            $(`.feature-item[data-feature="${target_column}"]`).remove();
+            $('#targetColumnModal').modal('hide');
+            
+            // Show selected target
+            showSelectedTarget(target_column, analysis);
+        } else {
+            alert('Please select a target variable');
+        }
+    });
+}
+
+function showSelectedTarget(column, analysis) {
+    const isNumeric = analysis.column_info.numeric.includes(column);
+    const stats = isNumeric ? analysis.numeric_stats[column] : analysis.categorical_stats[column];
+    
+    let targetHtml = `
+        <div class="alert alert-success">
+            <h6 class="mb-1">Target Variable: ${column}</h6>
+            <p class="mb-0 small">
+                ${isNumeric ? 
+                    `Numeric | Range: ${stats.min} to ${stats.max} | Mean: ${stats.mean.toFixed(2)}` :
+                    `Categorical | ${stats.unique_values} classes | Most common: ${stats.most_common} (${stats.most_common_pct.toFixed(1)}%)`
+                }
+            </p>
+        </div>
+    `;
+    
+    // Add target info above feature selection
+    $('.card-header:contains("Feature Selection")').after(targetHtml);
+}
+
+function buildCategoricalEncodingConfig() {
+    let config = {};
+    $('.feature-item.selected[data-type="categorical"]').each(function() {
+        const feature = $(this).data('feature');
+        // For now, default to label encoding. This could be made configurable per feature
+        config[feature] = 'label';
+    });
+    return config;
 }
 
 function saveModel() {

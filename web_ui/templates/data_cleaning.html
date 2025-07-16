@@ -78,7 +78,9 @@
                 </div>
                 <div class="card-body">
                     <div id="cleaningOptions">
-                        <!-- Options will be added here -->
+                        <div id="suggestionList" class="mb-3">
+                            <!-- Dynamic suggestions for cleaning -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -199,6 +201,37 @@ $(document).ready(function() {
         var params = {}; // Add parameters if needed
         
         applyCleaning(column, method, params);
+    });
+
+    // Load suggestions dynamically
+    function loadSuggestions(columns) {
+        var html = '';
+        columns.forEach(function(col) {
+            if (col.missing_pct > 50) {
+                html += `
+                    <div class="suggestion-item">
+                        <h6>${col.name} - ${col.type} (Missing: ${col.missing_pct}%)</h6>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Remove column">Remove Column</button>
+                    </div>
+                `;
+            } else if (col.type === 'int64' || col.type === 'float64') {
+                html += `
+                    <div class="suggestion-item">
+                        <h6>${col.name} - ${col.type}</h6>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Fill missing with mean">Fill with Mean</button>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Fill missing with median">Fill with Median</button>
+                    </div>
+                `;
+            }
+        });
+        $('#suggestionList').html(html);
+    }
+
+    // Apply suggestion
+    $(document).on('click', '.apply-suggestion', function() {
+        var column = $(this).data('column');
+        var method = $(this).data('method');
+        applyCleaning(column, method, {});
     });
 
     // Undo button

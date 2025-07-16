@@ -15,17 +15,19 @@ import sys
 # Add the project root to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from pipelines.data_cleaning_page import DataCleaningPage
+from pipelines.data_cleaning_enhanced import DataCleaningEnhanced
 from pipelines.model_training_page import ModelTrainingPage
 from pipelines.feature_recommender import FeatureRecommender
+from pipelines.data_preprocessing import DataPreprocessor
 from config import configure_gemini, ENABLE_GEMINI
 
 app = Quart(__name__)
 
 # Initialize pages and components
-data_cleaning = DataCleaningPage()
+data_cleaning = DataCleaningEnhanced()
 model_training = ModelTrainingPage()
 feature_recommender = FeatureRecommender()
+preprocessor = DataPreprocessor()
 app.config['SECRET_KEY'] = 'ml_pipeline_ui_secret_key'
 
 # Base directory paths
@@ -79,23 +81,68 @@ async def train_model():
             data = pd.read_csv(data_path)
             print("Data loaded successfully")
             
-            # Get feature recommendations
-            print("Getting feature recommendations...")
-            recommendations = await feature_recommender.get_recommendations(data)
-            print("Got feature recommendations")
-            print(f"Feature importance scores: {recommendations.get('feature_importances', [])}")
-            
-            # Ensure recommendations is serializable
-            safe_recommendations = {
-                'raw_suggestions': recommendations.get('gemini_suggestions', ''),
-                'feature_importances': recommendations.get('feature_importances', []),
-                'timestamp': str(recommendations.get('timestamp', ''))
+            # Get column information
+            column_info = {
+                'numeric': data.select_dtypes(include=['int64', 'float64']).columns.tolist(),
+                'categorical': data.select_dtypes(include=['object', 'category']).columns.tolist(),
+                'excluded': [col for col in data.columns if any(text in col.lower() for text in ['id', 'name', 'ticket', 'phone', 'email', 'address', 'description'])]
             }
-            print(f"Safe recommendations being passed to template: {safe_recommendations}")
             
-            return await render_template('model_training.html', 
-                                    initial_recommendations=safe_recommendations,
-                                    data_loaded=True)
+            # Initialize data analysis
+            data_analysis = {
+                'total_rows': int(len(data)),
+                'total_columns': int(len(data.columns)),
+                'column_info': column_info,
+                'missing_values_total': int(data.isnull().sum().sum())
+            }
+            
+            # Analyze data columns and types
+            print("Analyzing data structure...")
+            
+            # Get basic statistics for numeric columns
+            numeric_stats = {}
+            for col in column_info['numeric']:
+                col_data = data[col]
+                numeric_stats[col] = {
+                    'mean': float(col_data.mean()),
+                    'std': float(col_data.std()),
+                    'min': float(col_data.min()),
+                    'max': float(col_data.max()),
+                    'missing': int(col_data.isna().sum()),
+                    'missing_pct': float(col_data.isna().mean() * 100)
+                    
+                }
+            
+            # Get value counts for categorical columns
+            categorical_stats = {}
+            for col in column_info['categorical']:
+                col_data = data[col]
+                value_counts = col_data.value_counts(normalize=True)
+                categorical_stats[col] = {
+                    'unique_values': int(col_data.nunique()),
+                    'missing': int(col_data.isna().sum()),
+                    'missing_pct': float(col_data.isna().mean() * 100),
+                    'most_common': value_counts.index[0] if not value_counts.empty else None,
+                    'most_common_pct': float(value_counts.iloc[0] * 100) if not value_counts.empty else 0,
+                }
+            
+            # Add statistics to data analysis
+            data_analysis['numeric_stats'] = numeric_stats
+            data_analysis['categorical_stats'] = categorical_stats
+            
+            # Add timestamp to data analysis
+            data_analysis['timestamp'] = str(pd.Timestamp.now())
+            
+            # Prepare initial recommendations (empty for now)
+            initial_recommendations = {
+                'feature_importances': [],
+                'raw_suggestions': None
+            }
+            
+            return await render_template('model_training.html',
+                                    data_loaded=True,
+                                    data_analysis=data_analysis,
+                                    initial_recommendations=initial_recommendations)
             
         except Exception as e:
             error_msg = f"Error: {str(e)}"
@@ -210,70 +257,82 @@ async def save_cleaned_data():
 async def get_feature_recommendations():
     """Get feature recommendations from Gemini"""
     try:
-        model_training.load_data(str(TRAINING_DIR / 'data' / 'cleaned_data.csv'))
-        recommendations = await model_training.get_feature_recommendations()
+        # Find most recent data file
+        data_path = TRAINING_DIR / "data"
+        csv_files = list(data_path.glob("*.csv"))
+        if not csv_files:
+            return jsonify({
+                'success': False,
+                'error': 'No training data found'
+            })
+            
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
+        
+        # Load data and get recommendations
+        data = pd.read_csv(data_path)
+        recommendations = await feature_recommender.get_recommendations(data)
+        
+        # Enhance recommendations with feature types
+        if 'feature_importances' in recommendations:
+            numeric_features = data.select_dtypes(include=['int64', 'float64']).columns
+            for feature in recommendations['feature_importances']:
+                feature['type'] = 'numeric' if feature['feature'] in numeric_features else 'categorical'
+        
         return jsonify({'success': True, **recommendations})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/train-model', methods=['POST'])
 async def start_model_training():
-    """Start model training with selected features"""
+    """Start model training with selected features and preprocessing options"""
     try:
         data = await request.get_json()
-        
-        # Initialize pipeline
-        from pipelines.train_pipeline import MLTrainingPipeline
-        pipeline = MLTrainingPipeline()
-        
-        # Load and prepare data
-        data_path = TRAINING_DIR / 'data' / 'titanic.csv'
-        load_result = pipeline.load_data()
-        
-        if load_result is None:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to load training data'
-            })
-        
-        # Convert feature names to indices
-        feature_indices = []
-        all_features = pipeline.features
         selected_features = data.get('features', [])
+        test_size = data.get('test_size', 0.2)
+        categorical_encoding = data.get('categorical_encoding', {})
+        excluded_columns = data.get('excluded_columns', [])
+        target_column = data.get('target_column', None)  # Allow user to specify target
         
-        for feature in selected_features:
-            try:
-                idx = all_features.index(feature) + 1  # 1-based index
-                feature_indices.append(idx)
-            except ValueError:
-                continue
-        
-        if not feature_indices:
+        # Find most recent data file
+        data_path = TRAINING_DIR / 'data'
+        csv_files = list(data_path.glob("*.csv"))
+        if not csv_files:
             return jsonify({
                 'success': False,
-                'error': 'No valid features selected'
-            })
-        
-        # Run training pipeline
-        result = pipeline.run_training_pipeline(feature_indices=feature_indices)
-        
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'results': {
-                    'training_id': result['training_id'],
-                    'metrics': result['results'],
-                    'model_path': result['artifacts']['model_path'],
-                    'feature_importance': result['log_entry']['features_used']
-                }
-            })
-        else:
-            error_msg = result.get('error', 'Unknown error occurred')
-            return jsonify({
-                'success': False,
-                'error': error_msg
+                'error': 'No training data found'
             })
             
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
+        
+        # Load and preprocess data
+        preprocessor.load_data(data_path)
+        
+        # Configure preprocessing based on feature types
+        preprocessing_choices = {
+            'missing_actions': {},
+            'encoding': categorical_encoding,
+            'scaling': 'standard'
+        }
+        
+        # Set default missing value handling based on data type
+        for feature in selected_features:
+            if feature in preprocessor.data.select_dtypes(include=['int64', 'float64']).columns:
+                preprocessing_choices['missing_actions'][feature] = 'mean'
+            else:
+                preprocessing_choices['missing_actions'][feature] = 'mode'
+        
+        preprocessed_data, summary = preprocessor.preprocess_data(preprocessing_choices)
+        
+        # Train model with preprocessed data (use last column as target by default)
+        target_variable = preprocessor.data.columns[-1]
+        model_training.load_data(data_path, target_variable)
+        result = model_training.train_initial_model(selected_features, test_size)
+        
+        return jsonify({
+            'success': True,
+            'results': result,
+            'preprocessing_summary': summary
+        })
     except Exception as e:
         return jsonify({
             'success': False,
@@ -327,17 +386,13 @@ async def view_prediction(filename):
             return await render_template('error.html', error=f"Prediction file {filename} not found")
         
         df = pd.read_csv(file_path)
-        
-        # Add human-readable interpretations
         df_display = df.copy()
-        if 'Sex' in df_display.columns:
-            df_display['Gender'] = df_display['Sex'].map({0: 'Female', 1: 'Male'})
-        if 'Pclass' in df_display.columns:
-            df_display['Class'] = df_display['Pclass'].map({1: '1st Class', 2: '2nd Class', 3: '3rd Class'})
-        if 'Embarked' in df_display.columns:
-            df_display['Port'] = df_display['Embarked'].map({0: 'Cherbourg', 1: 'Queenstown', 2: 'Southampton'})
+        
+        # Add generic prediction label if it exists (assuming binary classification)
         if 'prediction' in df_display.columns:
-            df_display['Survival'] = df_display['prediction'].map({0: 'Did Not Survive', 1: 'Survived'})
+            unique_vals = sorted(df_display['prediction'].unique())
+            if len(unique_vals) == 2:
+                df_display['Prediction'] = df_display['prediction'].map({min(unique_vals): 'Negative', max(unique_vals): 'Positive'})
         
         # Summary statistics
         summary = {}
@@ -493,6 +548,40 @@ async def configure_api():
             'error': str(e)
         })
 
+@app.route('/api/get-gemini-suggestions')
+async def get_gemini_suggestions():
+    """Get feature recommendations from Gemini"""
+    try:
+        # Find the most recent CSV file
+        data_path = TRAINING_DIR / "data"
+        csv_files = list(data_path.glob("*.csv"))
+        if not csv_files:
+            return jsonify({
+                'success': False,
+                'error': 'No training data found'
+            })
+            
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
+        data = pd.read_csv(data_path)
+        
+        # Get recommendations
+        recommendations = await feature_recommender.get_recommendations(data)
+        if not recommendations or 'gemini_suggestions' not in recommendations:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to get AI suggestions'
+            })
+            
+        return jsonify({
+            'success': True,
+            'suggestions': recommendations['gemini_suggestions']
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 @app.route('/api/config-status')
 async def config_status():
     """Get configuration status"""
@@ -522,14 +611,36 @@ def test_endpoint():
     """Test endpoint to verify API is working and return features"""
     print("Test endpoint called")
     try:
-        data_path = TRAINING_DIR / "data" / "titanic.csv"
+        # Find most recent data file
+        data_path = TRAINING_DIR / "data"
+        csv_files = list(data_path.glob("*.csv"))
+        if not csv_files:
+            return jsonify({
+                'success': False,
+                'error': 'No training data found'
+            })
+            
+        data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
         df = pd.read_csv(data_path)
-        features = list(df.columns[:-1])  # Assume last column is target
-        print(f"Test endpoint features: {features}")
+        
+        # Get feature types
+        numeric_features = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_features = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        # Remove target (last column) from feature lists
+        if len(df.columns) > 0:
+            if df.columns[-1] in numeric_features:
+                numeric_features.remove(df.columns[-1])
+            if df.columns[-1] in categorical_features:
+                categorical_features.remove(df.columns[-1])
+        
+        print(f"Test endpoint features - Numeric: {numeric_features}, Categorical: {categorical_features}")
         return jsonify({
             'success': True,
             'message': 'API is working',
-            'features': features
+            'numeric_features': numeric_features,
+            'categorical_features': categorical_features,
+            'target': df.columns[-1] if len(df.columns) > 0 else None
         })
     except Exception as e:
         return jsonify({
@@ -539,7 +650,7 @@ def test_endpoint():
 
 @app.route('/training/features')
 def get_available_features():
-    """Get available features from training data"""
+    """Get available features from training data with enhanced analysis"""
     print("\n=== Feature Loading Debug Log ===")
     print("Request received for features")
     try:
@@ -566,34 +677,73 @@ def get_available_features():
             print(f"ERROR reading CSV: {str(e)}")
             raise
         
-        features = list(df.columns[:-1])  # Assume last column is target
-        print(f"7. Extracted features: {features}")
+        # Identify feature types
+        numeric_features = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_features = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        # Get target variable (last column)
+        target = df.columns[-1] if len(df.columns) > 0 else None
+        
+        # Remove target from feature lists if present
+        if target in numeric_features:
+            numeric_features.remove(target)
+        if target in categorical_features:
+            categorical_features.remove(target)
+            
+        all_features = numeric_features + categorical_features
+        print(f"7. Extracted features - Numeric: {numeric_features}, Categorical: {categorical_features}")
         
         print("8. Analyzing features...")
         feature_info = []
         try:
-            for i, feature in enumerate(features):
+            for i, feature in enumerate(all_features):
                 print(f"   Processing feature: {feature}")
                 feature_data = df[feature]
                 missing_count = feature_data.isnull().sum()
                 missing_pct = (missing_count / len(feature_data)) * 100
+                is_numeric = feature in numeric_features
                 
                 info = {
                     'index': i + 1,
                     'name': feature,
-                    'type': str(feature_data.dtype),
+                    'type': 'numeric' if is_numeric else 'categorical',
+                    'data_type': str(feature_data.dtype),
                     'missing': int(missing_count),
                     'missing_pct': float(missing_pct),
                     'unique_values': int(feature_data.nunique()),
-                    'sample_values': feature_data.dropna().head().tolist()
+                    'sample_values': feature_data.dropna().head().tolist(),
+                    'preprocessing_options': {
+                        'missing_handling': ['mean', 'median', 'mode', 'constant'] if is_numeric else ['mode', 'constant', 'unknown'],
+                        'encoding': [] if is_numeric else ['label', 'onehot', 'exclude'],
+                        'scaling': ['standard', 'minmax', 'robust', 'none'] if is_numeric else []
+                    }
                 }
                 
-                if feature_data.dtype in ['int64', 'float64']:
+                if is_numeric:
                     info.update({
-                        'mean': float(feature_data.mean()),
-                        'std': float(feature_data.std()),
-                        'min': float(feature_data.min()),
-                        'max': float(feature_data.max())
+                        'statistics': {
+                            'mean': float(feature_data.mean()),
+                            'std': float(feature_data.std()),
+                            'min': float(feature_data.min()),
+                            'max': float(feature_data.max()),
+                            'median': float(feature_data.median()),
+                            'q1': float(feature_data.quantile(0.25)),
+                            'q3': float(feature_data.quantile(0.75))
+                        }
+                    })
+                else:
+                    # Add categorical statistics
+                    value_counts = feature_data.value_counts(normalize=True)
+                    info.update({
+                        'statistics': {
+                            'mode': feature_data.mode()[0],
+                            'unique_count': len(value_counts),
+                            'most_frequent': value_counts.index[0],
+                            'most_frequent_pct': float(value_counts.iloc[0] * 100),
+                            'value_distribution': {
+                                str(k): float(v) for k, v in value_counts.head().items()
+                            }
+                        }
                     })
                 
                 feature_info.append(info)
@@ -602,11 +752,53 @@ def get_available_features():
             print(f"ERROR analyzing features: {str(e)}")
             raise
         
+        # Analyze target variable
+        target_info = None
+        if target:
+            target_data = df[target]
+            is_numeric_target = target in df.select_dtypes(include=['int64', 'float64']).columns
+            
+            target_info = {
+                'name': target,
+                'type': 'numeric' if is_numeric_target else 'categorical',
+                'data_type': str(target_data.dtype),
+                'unique_values': int(target_data.nunique())
+            }
+            
+            if is_numeric_target:
+                target_info.update({
+                    'statistics': {
+                        'mean': float(target_data.mean()),
+                        'std': float(target_data.std()),
+                        'min': float(target_data.min()),
+                        'max': float(target_data.max())
+                    }
+                })
+            else:
+                value_counts = target_data.value_counts(normalize=True)
+                target_info.update({
+                    'statistics': {
+                        'classes': value_counts.index.tolist(),
+                        'class_distribution': {
+                            str(k): float(v) for k, v in value_counts.items()
+                        }
+                    }
+                })
+        
         print("9. Preparing JSON response...")
         response = {
             'success': True,
+            'dataset_info': {
+                'total_samples': len(df),
+                'total_features': len(all_features),
+                'numeric_features': len(numeric_features),
+                'categorical_features': len(categorical_features),
+                'missing_values_total': df.isnull().sum().sum(),
+                'file_name': data_path.name,
+                'file_timestamp': datetime.fromtimestamp(data_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            },
             'features': feature_info,
-            'target': df.columns[-1]
+            'target': target_info
         }
         print("10. Returning response")
         return jsonify(response)

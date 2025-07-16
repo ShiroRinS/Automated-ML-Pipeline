@@ -29,8 +29,11 @@
                         <button class="btn btn-secondary me-2" id="deselectAll">
                             <i class="fas fa-times"></i> Deselect All
                         </button>
-                        <button class="btn btn-info" id="selectRecommended">
+                    <button class="btn btn-info me-2" id="selectRecommended">
                             <i class="fas fa-star"></i> Use Recommended
+                        </button>
+                        <button class="btn btn-primary" id="getGeminiSuggestions">
+                            <i class="fas fa-robot"></i> Get AI Suggestions
                         </button>
                     </div>
                     
@@ -230,6 +233,51 @@ $(document).ready(function() {
             }
         });
         updateSelectedCount();
+    });
+
+    $('#getGeminiSuggestions').click(function() {
+        const button = $(this);
+        const status = $('#trainingStatus');
+        
+        button.prop('disabled', true);
+        status.html(`
+            <div class="alert alert-info">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                Getting AI suggestions...
+            </div>
+        `);
+        
+        $.ajax({
+            url: '/api/get-gemini-suggestions',
+            method: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    status.html(`
+                        <div class="alert alert-success">
+                            <h6>AI Suggestions</h6>
+                            <div class="suggestions-content">
+                                ${response.suggestions.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                    `);
+                } else {
+                    status.html(`
+                        <div class="alert alert-danger">
+                            Failed to get AI suggestions: ${response.error}
+                        </div>
+                    `);
+                }
+                button.prop('disabled', false);
+            },
+            error: function(xhr) {
+                status.html(`
+                    <div class="alert alert-danger">
+                        Failed to get AI suggestions: ${xhr.responseJSON?.error || 'Unknown error'}
+                    </div>
+                `);
+                button.prop('disabled', false);
+            }
+        });
     });
 
     $('#startTraining').click(function() {

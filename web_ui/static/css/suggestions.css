@@ -1,0 +1,60 @@
+.gemini-suggestions {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin: 20px 0;
+    padding: 25px;
+}
+
+.suggestion-section {
+    margin-bottom: 25px;
+}
+
+.suggestion-section:last-child {
+    margin-bottom: 0;
+}
+
+.suggestion-section h3 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: #2c3e50;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+.suggestion-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.suggestion-item {
+    background: #f8f9fa;
+    border-left: 4px solid #4a90e2;
+    margin-bottom: 10px;
+    padding: 12px 15px;
+    border-radius: 0 4px 4px 0;
+    transition: all 0.3s ease;
+}
+
+.suggestion-item:hover {
+    transform: translateX(5px);
+    background: #e9ecef;
+}
+
+.metadata-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.metadata-item {
+    display: inline-block;
+    margin-right: 20px;
+}
+
+.metadata-item i {
+    margin-right: 5px;
+}
