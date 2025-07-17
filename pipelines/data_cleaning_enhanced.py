@@ -274,6 +274,39 @@ class DataCleaningEnhanced:
         self.cleaned_data.to_csv(output_path, index=False)
         return f"Cleaned data saved to {output_path}"
 
+    def get_cleaning_options(self) -> Dict[str, List[str]]:
+        """Get available cleaning options for each column"""
+        if self.data is None:
+            raise ValueError("No data loaded. Please load data first.")
+
+        cleaning_options = {}
+        for column in self.data.columns:
+            options = []
+            if self.data[column].dtype in ['int64', 'float64']:
+                # Numeric column options
+                options.extend([
+                    'Fill missing with mean',
+                    'Fill missing with median',
+                    'Remove rows with missing values',
+                    'Cap outliers',
+                    'Remove outliers (IQR method)',
+                    'Remove column'
+                ])
+            else:
+                # Categorical column options
+                options.extend([
+                    'Fill missing with mode',
+                    'Fill missing with "Unknown"',
+                    'Remove rows with missing values',
+                    'Encode categorical (Label)',
+                    'Encode categorical (One-hot)',
+                    'Group rare categories',
+                    'Remove column'
+                ])
+            cleaning_options[column] = options
+
+        return cleaning_options
+
     def normalize_data(self) -> pd.DataFrame:
         """Normalize numeric columns to range [0,1] using MinMaxScaler"""
         if self.cleaned_data is None:
