@@ -208,8 +208,10 @@ $(document).ready(function() {
             contentType: false,
             success: function(response) {
                 if (response.success) {
+                    currentData = response;  // Store the response
                     showAnalysis(response.analysis);
                     loadColumns(response.columns);
+                    showCategoricalWarnings(response);  // Show initial warnings
                 } else {
                     alert('Error uploading file: ' + response.error);
                 }
@@ -229,42 +231,46 @@ $(document).ready(function() {
         response.columns.forEach(function(col) {
             if (col.type === 'object' && col.needs_encoding) {
                 hasWarnings = true;
-                warningsHtml += `
+                warningsHtml += '
                     <div class="alert alert-warning mb-2" role="alert">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Warning:</strong> The column "${col.name}" needs to be encoded before training.
+                        <strong>Warning:</strong> The column "' + col.name + '" needs to be encoded before training.
                         <div class="mt-2">
-                            <button class="btn btn-sm btn-warning" onclick="applyCleaning('${col.name}', 'Encode categorical (Label)')">
+                            <button class="btn btn-sm btn-warning" onclick="applyCleaning(\'' + col.name + '\', \'Encode categorical (Label)\')">
                                 <i class="fas fa-magic me-1"></i> Apply Label Encoding
                             </button>
-                            <button class="btn btn-sm btn-warning ms-2" onclick="applyCleaning('${col.name}', 'Encode categorical (One-hot)')">
+                            <button class="btn btn-sm btn-warning ms-2" onclick="applyCleaning(\'' + col.name + '\', \'Encode categorical (One-hot)\')">
                                 <i class="fas fa-table me-1"></i> Apply One-hot Encoding
                             </button>
                         </div>
                     </div>
-                `;
+                ';
             }
         });
 
         if (hasWarnings) {
-            warningsHtml = `
+            warningsHtml = '
                 <div class="mb-3">
                     <h6><i class="fas fa-exclamation-circle"></i> Categorical Columns Need Encoding</h6>
                     <p class="text-muted small">These columns must be encoded before they can be used for training.</p>
                 </div>
-                ${warningsHtml}
-            `;
+                ' + warningsHtml + '
+            ';
         }
 
         $('#categoricalWarnings').html(warningsHtml);
     }
+
+    let currentData = null; // Store the current data
 
     // Column selection
     $(document).on('click', '.column-item', function() {
         $('.column-item').removeClass('active');
         $(this).addClass('active');
         loadCleaningOptions($(this).data('column'));
-        showCategoricalWarnings(response.columns);  // Integrate this with the API response to show warnings
+        if (currentData) {
+            showCategoricalWarnings(currentData);
+        }
     });
 
     // Apply cleaning
@@ -362,27 +368,30 @@ function loadColumns(columns) {
     var html = '';
     columns.forEach(function(col) {
         const status = getColumnStatusInfo(col);
-        html += `
-            <a href="#" class="list-group-item list-group-item-action column-item" data-column="${col.name}">
+        const cleanedBadge = col.cleaning_applied ? 
+            '<span class="badge bg-success"><i class="fas fa-check"></i> Cleaned</span>' : '';
+        const missingBadge = col.missing_pct > 0 ? 
+            '<span class="badge bg-danger">Missing: ' + col.missing_pct + '%</span>' : '';
+
+        html += '
+            <a href="#" class="list-group-item list-group-item-action column-item" data-column="' + col.name + '">
                 <div class="d-flex w-100 justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-1">
-                            <i class="fas fa-${status.icon} ${status.statusClass} me-2" data-bs-toggle="tooltip" title="${status.message}"></i>
-                            ${col.name}
+                            <i class="fas fa-' + status.icon + ' ' + status.statusClass + ' me-2" data-bs-toggle="tooltip" title="' + status.message + '"></i>
+                            ' + col.name + '
                         </h6>
                         <div class="small">
-                            <span class="badge bg-secondary me-2">${col.type}</span>
-                            ${col.missing_pct > 0 ? `<span class="badge bg-danger">Missing: ${col.missing_pct}%</span>` : ''}
+                            <span class="badge bg-secondary me-2">' + col.type + '</span>
+                            ' + missingBadge + '
                         </div>
                     </div>
                     <div class="text-end">
-                        ${col.cleaning_applied ? '
-                            <span class="badge bg-success"><i class="fas fa-check"></i> Cleaned</span>
-                        ' : ''}
+                        ' + cleanedBadge + '
                     </div>
                 </div>
             </a>
-        `;
+        ';
     });
     $('#columnList').html(html);
     
