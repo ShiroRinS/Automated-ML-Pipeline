@@ -77,5 +77,155 @@
         </div>
     </div>
     {% endif %}
+
+    {% if data_loaded %}
+    <!-- Feature Selection -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Feature Selection</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h6>Available Features</h6>
+                    <div class="list-group" id="availableFeatures">
+                        {% for col in data_analysis.column_info.numeric + data_analysis.column_info.categorical %}
+                        <div class="list-group-item">
+                            <div class="form-check">
+                                <input class="form-check-input feature-checkbox" type="checkbox" value="{{ col }}" id="feature_{{ col }}">
+                                <label class="form-check-label" for="feature_{{ col }}">{{ col }}</label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Target Variable</h6>
+                    <select class="form-select" id="targetVariable">
+                        <option value="">Select Target Variable</option>
+                        {% for col in data_analysis.column_info.numeric + data_analysis.column_info.categorical %}
+                        <option value="{{ col }}">{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Selection and Training Config -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Model Selection and Training Configuration</h5>
+        </div>
+        <div class="card-body">
+            <form id="trainingForm">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="modelType">Choose Model</label>
+                        <select class="form-select mb-3" id="modelType">
+                            <option>Linear Regression</option>
+                            <option>Decision Tree</option>
+                            <option>Random Forest</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="testSize">Test Size</label>
+                        <input type="number" class="form-control mb-3" id="testSize" placeholder="e.g., 0.2" min="0.1" max="0.5" step="0.1">
+                    </div>
+                </div>
+                <div id="validationMessage" class="alert alert-warning d-none mb-3">
+                    Please select features and target variable before training.
+                </div>
+                <button class="btn btn-primary" id="trainButton">Start Training</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">No data loaded for training. Please check your data source.</div>
+    {% endif %}
 </div>
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Set default test size
+    $('#testSize').val(0.2);
+
+    // Target variable change handler
+    $('#targetVariable').on('change', function() {
+        const selectedTarget = $(this).val();
+        // Disable/enable feature checkboxes based on target selection
+        $('.feature-checkbox').each(function() {
+            const featureValue = $(this).val();
+            if (featureValue === selectedTarget) {
+                $(this).prop('checked', false).prop('disabled', true);
+            } else {
+                $(this).prop('disabled', false);
+            }
+        });
+    });
+
+    // Handle form submission
+    $('#trainingForm').on('submit', function(e) {
+        e.preventDefault();
+
+        // Get selected features
+        const selectedFeatures = $('.feature-checkbox:checked').map(function() {
+            return $(this).val();
+        }).get();
+
+        // Get target variable
+        const targetVariable = $('#targetVariable').val();
+
+        // Validation
+        if (selectedFeatures.length === 0 || !targetVariable) {
+            $('#validationMessage').removeClass('d-none');
+            return;
+        }
+        $('#validationMessage').addClass('d-none');
+        
+        // Show loading state
+        $('#trainButton').prop('disabled', true).html(
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Training...'
+        );
+
+        // Prepare training configuration
+        const config = {
+            model_type: $('#modelType').val(),
+            test_size: parseFloat($('#testSize').val()),
+            features: selectedFeatures,
+            target_variable: targetVariable
+        };
+
+        // Send training request
+        $.ajax({
+            url: '/api/train-model',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(config),
+            success: function(response) {
+                if (response.success) {
+                    // Show success message
+                    alert('Model trained successfully! ' +
+                          'Test Score: ' + response.results.test_score.toFixed(4) + '\n' +
+                          'Training Score: ' + response.results.train_score.toFixed(4));
+                    
+                    // Redirect to training history
+                    window.location.href = '/training-history';
+                } else {
+                    alert('Error training model: ' + response.error);
+                }
+            },
+            error: function() {
+                alert('Error occurred while training the model');
+            },
+            complete: function() {
+                // Reset button state
+                $('#trainButton').prop('disabled', false).html('Start Training');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
 {% endblock %}

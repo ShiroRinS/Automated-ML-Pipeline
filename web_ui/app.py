@@ -354,15 +354,20 @@ async def get_feature_recommendations():
 
 @app.route('/api/train-model', methods=['POST'])
 async def start_model_training():
-    """Start model training with selected features and preprocessing options"""
+    """Start model training with selected features and target variable"""
     try:
         data = await request.get_json()
         selected_features = data.get('features', [])
         test_size = data.get('test_size', 0.2)
-        categorical_encoding = data.get('categorical_encoding', {})
-        excluded_columns = data.get('excluded_columns', [])
-        target_column = data.get('target_column', None)  # Allow user to specify target
-        
+        target_variable = data.get('target_variable')
+        model_type = data.get('model_type')
+
+        if not selected_features or not target_variable:
+            return jsonify({
+                'success': False,
+                'error': 'Features and target variable must be specified'
+            })
+
         # Find most recent data file
         data_path = TRAINING_DIR / 'data'
         csv_files = list(data_path.glob("*.csv"))
@@ -380,23 +385,37 @@ async def start_model_training():
         # Configure preprocessing based on feature types
         preprocessing_choices = {
             'missing_actions': {},
-            'encoding': categorical_encoding,
+            'encoding': {},
             'scaling': 'standard'
         }
         
-        # Set default missing value handling based on data type
+        # Determine preprocessing for each feature
+        df = pd.read_csv(data_path)
+        numeric_features = df.select_dtypes(include=['int64', 'float64']).columns
         for feature in selected_features:
-            if feature in preprocessor.data.select_dtypes(include=['int64', 'float64']).columns:
+            if feature in numeric_features:
                 preprocessing_choices['missing_actions'][feature] = 'mean'
             else:
                 preprocessing_choices['missing_actions'][feature] = 'mode'
+                preprocessing_choices['encoding'][feature] = 'label'
         
+        # Preprocess data
         preprocessed_data, summary = preprocessor.preprocess_data(preprocessing_choices)
         
-        # Train model with preprocessed data (use last column as target by default)
-        target_variable = preprocessor.data.columns[-1]
+        # Initialize and train model
         model_training.load_data(data_path, target_variable)
-        result = model_training.train_initial_model(selected_features, test_size)
+        result = model_training.train_initial_model(
+            selected_features,
+            test_size,
+            model_type=model_type.lower().replace(' ', '_')
+        )
+        
+        # Add feature importance if available
+        if hasattr(model_training.model, 'feature_importances_'):
+            result['feature_importances'] = dict(zip(
+                selected_features,
+                model_training.model.feature_importances_.tolist()
+            ))
         
         return jsonify({
             'success': True,
