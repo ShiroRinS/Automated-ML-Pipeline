@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Tuple
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 import json
 from datetime import datetime
@@ -126,7 +128,20 @@ class ModelTrainingPage:
                 'timestamp': pd.Timestamp.now()
             }
     
-    def train_initial_model(self, selected_features: List[str], test_size: float = 0.2) -> Dict[str, Any]:
+    def get_model(self, model_type: str):
+        """Get model instance based on model type"""
+        model_type = model_type.lower().replace(' ', '_')
+        if model_type == 'random_forest':
+            return RandomForestClassifier(random_state=42)
+        elif model_type == 'decision_tree':
+            return DecisionTreeClassifier(random_state=42)
+        elif model_type in ['linear_regression', 'logistic_regression']:
+            return LogisticRegression(random_state=42)
+        else:
+            # Default to Random Forest
+            return RandomForestClassifier(random_state=42)
+
+    def train_initial_model(self, selected_features: List[str], test_size: float = 0.2, model_type: str = 'random_forest') -> Dict[str, Any]:
         """Train initial model with selected features"""
         if self.data is None:
             raise ValueError("No data loaded. Please load data first.")
@@ -148,17 +163,29 @@ class ModelTrainingPage:
         X_test_scaled = self.scaler.transform(X_test)
         
         # Train model
-        self.model = RandomForestClassifier(random_state=42)
+        self.model = self.get_model(model_type)
         self.model.fit(X_train_scaled, y_train)
         
         # Get predictions and metrics
         y_pred = self.model.predict(X_test_scaled)
         
-        # Get feature importances
-        self.feature_importances = pd.DataFrame({
-            'feature': selected_features,
-            'importance': self.model.feature_importances_
-        }).sort_values('importance', ascending=False)
+        # Get feature importances if available
+        if hasattr(self.model, 'feature_importances_'):
+            self.feature_importances = pd.DataFrame({
+                'feature': selected_features,
+                'importance': self.model.feature_importances_
+            }).sort_values('importance', ascending=False)
+        elif hasattr(self.model, 'coef_'):
+            # For linear models that use coefficients
+            self.feature_importances = pd.DataFrame({
+                'feature': selected_features,
+                'importance': np.abs(self.model.coef_[0]) if len(self.model.coef_.shape) > 1 else np.abs(self.model.coef_)
+            }).sort_values('importance', ascending=False)
+        else:
+            self.feature_importances = pd.DataFrame({
+                'feature': selected_features,
+                'importance': [1/len(selected_features)] * len(selected_features)
+            })
         
         results = {
             'train_score': self.model.score(X_train_scaled, y_train),
