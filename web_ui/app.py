@@ -217,7 +217,9 @@ async def upload_data():
                     'name': col_info['name'],
                     'type': col_info['type'],
                     'missing_pct': col_info['missing_pct'],
-                    'needs_encoding': col_info['type'] == 'object' and not encoded_check
+                    'needs_encoding': col_info['type'] == 'object' and not encoded_check,
+                    'missing_handled': col_info['missing_pct'] <= 0 or 'Remove rows with missing values' in analysis.get('cleaning_actions', {}).get(col_info['name'], []),
+                    'is_encoded': encoded_check
                 })
             
             return jsonify({
