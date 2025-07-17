@@ -88,6 +88,17 @@
             <!-- Data Preparation Tools -->
             <div class="card mt-3">
                 <div class="card-header">
+                    <h5 class="mb-0">Data Status</h5>
+                </div>
+                <div class="card-body">
+                    <div id="categoricalWarnings" class="mb-3">
+                        <!-- Warning messages for categorical columns will be displayed here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
                     <h5 class="mb-0">Data Preparation Tools</h5>
                 </div>
                 <div class="card-body">
@@ -198,11 +209,27 @@ $(document).ready(function() {
         });
     });
 
+// Show warnings for unencoded categorical columns
+    function showCategoricalWarnings(columns) {
+        var warningsHtml = '';
+        columns.forEach(function(col) {
+            if (col.type === 'categorical' && col.needs_encoding) {
+                warningsHtml += `
+                    cdiv class="alert alert-warning" role="alert"e
+                        cstrongeWarning:c/stronge The column "${col.name}" is categorical and needs encoding before training.
+                    c/dive
+                `;
+            }
+        });
+        $('#categoricalWarnings').html(warningsHtml);
+    }
+
     // Column selection
     $(document).on('click', '.column-item', function() {
         $('.column-item').removeClass('active');
         $(this).addClass('active');
         loadCleaningOptions($(this).data('column'));
+        showCategoricalWarnings(response.columns);  // Integrate this with the API response to show warnings
     });
 
     // Apply cleaning
