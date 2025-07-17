@@ -287,20 +287,16 @@ $(document).ready(function() {
         var html = '';
         columns.forEach(function(col) {
             if (col.missing_pct > 50) {
-                html += '
-                    <div class="suggestion-item">
-                        <h6>' + col.name + ' - ' + col.type + ' (Missing: ' + col.missing_pct + '%)</h6>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Remove column">Remove Column</button>
-                    </div>
-                ';
+                html += '<div class="suggestion-item">' +
+                    '<h6>' + col.name + ' - ' + col.type + ' (Missing: ' + col.missing_pct + '%)</h6>' +
+                    '<button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Remove column">Remove Column</button>' +
+                    '</div>';
             } else if (col.type === 'int64' || col.type === 'float64') {
-                html += '
-                    <div class="suggestion-item">
-                        <h6>' + col.name + ' - ' + col.type + '</h6>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with mean">Fill with Mean</button>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with median">Fill with Median</button>
-                    </div>
-                ';
+                html += '<div class="suggestion-item">' +
+                    '<h6>' + col.name + ' - ' + col.type + '</h6>' +
+                    '<button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with mean">Fill with Mean</button>' +
+                    '<button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with median">Fill with Median</button>' +
+                    '</div>';
             }
         });
         $('#suggestionList').html(html);
@@ -373,25 +369,23 @@ function loadColumns(columns) {
         const missingBadge = col.missing_pct > 0 ? 
             '<span class="badge bg-danger">Missing: ' + col.missing_pct + '%</span>' : '';
 
-        html += '
-            <a href="#" class="list-group-item list-group-item-action column-item" data-column="' + col.name + '">
-                <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div>
-                        <h6 class="mb-1">
-                            <i class="fas fa-' + status.icon + ' ' + status.statusClass + ' me-2" data-bs-toggle="tooltip" title="' + status.message + '"></i>
-                            ' + col.name + '
-                        </h6>
-                        <div class="small">
-                            <span class="badge bg-secondary me-2">' + col.type + '</span>
-                            ' + missingBadge + '
-                        </div>
-                    </div>
-                    <div class="text-end">
-                        ' + cleanedBadge + '
-                    </div>
-                </div>
-            </a>
-        ';
+        html += '<a href="#" class="list-group-item list-group-item-action column-item" data-column="' + col.name + '">' +
+            '<div class="d-flex w-100 justify-content-between align-items-center">' +
+            '<div>' +
+            '<h6 class="mb-1">' +
+            '<i class="fas fa-' + status.icon + ' ' + status.statusClass + ' me-2" data-bs-toggle="tooltip" title="' + status.message + '"></i>' +
+            col.name +
+            '</h6>' +
+            '<div class="small">' +
+            '<span class="badge bg-secondary me-2">' + col.type + '</span>' +
+            missingBadge +
+            '</div>' +
+            '</div>' +
+            '<div class="text-end">' +
+            cleanedBadge +
+            '</div>' +
+            '</div>' +
+            '</a>';
     });
     $('#columnList').html(html);
     
@@ -403,11 +397,9 @@ function loadCleaningOptions(column) {
     $.get('/api/cleaning-options/' + column, function(response) {
         var html = '';
         response.options.forEach(function(option) {
-            html += '
-                <button class="btn btn-outline-primary mb-2 w-100 clean-option" data-method="' + option + '">
-                    ' + option + '
-                </button>
-            ';
+            html += '<button class="btn btn-outline-primary mb-2 w-100 clean-option" data-method="' + option + '">' +
+                option +
+                '</button>';
         });
         $('#cleaningOptions').html(html);
     });
@@ -444,19 +436,17 @@ function updatePreview(preview) {
 function updateHistory(history) {
     var html = '';
     history.forEach(function(item) {
-        html += '
-            <tr>
-                <td>' + item.timestamp + '</td>
-                <td>' + item.column + '</td>
-                <td>' + item.method + '</td>
-                <td>' + item.result_message + '</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-danger" onclick="undoTo(\'' + item.id + '\')">
-                        Undo to here
-                    </button>
-                </td>
-            </tr>
-        ';
+        html += '<tr>' +
+            '<td>' + item.timestamp + '</td>' +
+            '<td>' + item.column + '</td>' +
+            '<td>' + item.method + '</td>' +
+            '<td>' + item.result_message + '</td>' +
+            '<td>' +
+            '<button class="btn btn-sm btn-outline-danger" onclick="undoTo(\'' + item.id + '\')">' +
+            'Undo to here' +
+            '</button>' +
+            '</td>' +
+            '</tr>';
     });
     $('#historyTable tbody').html(html);
 }
