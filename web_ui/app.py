@@ -186,58 +186,56 @@ async def train_model():
         return await render_template('error.html', error=str(e))
 
 @app.route('/api/upload-data', methods=['POST'])
-    async def upload_data():
-        """Handle data file upload"""
+async def upload_data():
+    """Handle data file upload"""
+    try:
+        files = await request.files
+        if 'file' not in files:
+            return jsonify({'success': False, 'error': 'No file uploaded'})
+            
+        file = files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+            
+        # Ensure directory exists
+        data_dir = TRAINING_DIR / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+            
+        # Save file temporarily
+        temp_path = data_dir / 'temp.csv'
+        await file.save(temp_path)
+        
         try:
-            files = await request.files
-            if 'file' not in files:
-                return jsonify({'success': False, 'error': 'No file uploaded'})
-                
-            file = files['file']
-            if file.filename == '':
-                return jsonify({'success': False, 'error': 'No file selected'})
-                
-            # Ensure directory exists
-            data_dir = TRAINING_DIR / 'data'
-            data_dir.mkdir(parents=True, exist_ok=True)
-                
-            # Save file temporarily
-            temp_path = data_dir / 'temp.csv'
-            await file.save(temp_path)
+            # Load and analyze data
+            analysis = data_cleaning.load_data(str(temp_path))
             
-            try:
-                # Load and analyze data
-                analysis = data_cleaning.load_data(str(temp_path))
-                
-                # Extract column information
-                columns = []
-                for col_info in analysis['columns']:
-                    encoded_check = col_info['name'] in analysis.get('encoded_columns', [])
-                    columns.append({
-                        'name': col_info['name'],
-                        'type': col_info['type'],
-                        'missing_pct': col_info['missing_pct'],
-                        'needs_encoding': col_info['type'] == 'object' and not encoded_check
-                    })
-                
-                return jsonify({
-                    'success': True,
-                    'analysis': {
-                        'total_rows': analysis['total_rows'],
-                        'total_columns': analysis['total_columns'],
-                        'quality_score': analysis['quality_score'],
-                        'data_types': {col['name']: col['type'] for col in analysis['columns']},
-                        'missing_stats': {col['name']: {'percentage': col['missing_pct']} for col in analysis['columns']}
-                    },
-                    'columns': columns
+            # Extract column information
+            columns = []
+            for col_info in analysis['columns']:
+                encoded_check = col_info['name'] in analysis.get('encoded_columns', [])
+                columns.append({
+                    'name': col_info['name'],
+                    'type': col_info['type'],
+                    'missing_pct': col_info['missing_pct'],
+                    'needs_encoding': col_info['type'] == 'object' and not encoded_check
                 })
-            except Exception as e:
-                return jsonify({'success': False, 'error': f'Error analyzing data: {str(e)}'})
-                
-        except Exception as e:
-            return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'})
             
-        return jsonify({'success': False, 'error': str(e)})
+            return jsonify({
+                'success': True,
+                'analysis': {
+                    'total_rows': analysis['total_rows'],
+                    'total_columns': analysis['total_columns'],
+                    'quality_score': analysis['quality_score'],
+                    'data_types': {col['name']: col['type'] for col in analysis['columns']},
+                    'missing_stats': {col['name']: {'percentage': col['missing_pct']} for col in analysis['columns']}
+                },
+                'columns': columns
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Error analyzing data: {str(e)}'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'})
 
 @app.route('/api/cleaning-options/<column>')
 async def get_cleaning_options(column):
