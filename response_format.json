@@ -1,0 +1,45 @@
+{
+    "responseFormat": {
+        "title": "Structured Response Template",
+        "version": "1.0",
+        "sections": [
+            {
+                "type": "recommended_features",
+                "icon": "🎯",
+                "title": "Recommended Features",
+                "content": "Array or object containing recommended features"
+            },
+            {
+                "type": "selection_tips",
+                "icon": "💡",
+                "title": "Feature Selection Tips",
+                "content": "Array or object containing selection guidelines"
+            },
+            {
+                "type": "considerations",
+                "icon": "⚠️",
+                "title": "Important Considerations",
+                "content": "Array or object containing crucial points to consider"
+            }
+        ],
+        "example": {
+            "🎯 Recommended Features": [
+                "Feature 1 description",
+                "Feature 2 description"
+            ],
+            "💡 Feature Selection Tips": [
+                "Tip 1 explanation",
+                "Tip 2 explanation"
+            ],
+            "⚠️ Important Considerations": [
+                "Consideration 1 details",
+                "Consideration 2 details"
+            ]
+        }
+    },
+    "metadata": {
+        "created": "2025-07-14T09:55:15Z",
+        "project": "ThaiInsuranceInternPipeline",
+        "purpose": "ML Quick Prototype Response Format"
+    }
+}

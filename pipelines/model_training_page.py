@@ -13,11 +13,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 import json
 from datetime import datetime
-from .data_handler import DataHandler
+from .data_preprocessing import DataPreprocessor
 
 class ModelTrainingPage:
     def __init__(self):
-        self.data_handler = DataHandler()
+        self.preprocessor = DataPreprocessor()
         self.data = None
         self.features = None
         self.target = None
@@ -27,6 +27,7 @@ class ModelTrainingPage:
         self.training_history = []
         self.best_params = None
         self.feature_importances = None
+        self.preprocessing_choices = None
         
     def load_data(self, data_path: str, target_column: str = None) -> Dict[str, Any]:
         """Load data and set target column"""

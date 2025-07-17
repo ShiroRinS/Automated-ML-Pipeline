@@ -1,0 +1,56 @@
+Please provide your response in the following structured JSON format:
+
+{
+    "response": {
+        "🎯 Recommended Features": [
+            // List your main recommendations here
+            // Each item should be a string
+        ],
+        "💡 Feature Selection Tips": [
+            // List your tips and guidelines here
+            // Each item should be a string
+        ],
+        "⚠️ Important Considerations": [
+            // List important points to consider
+            // Each item should be a string
+        ]
+    },
+    "metadata": {
+        "topic": "The main topic of the response",
+        "timestamp": "YYYY-MM-DDTHH:mm:ssZ",
+        "context": "Brief context of the response"
+    }
+}
+
+Rules for response:
+1. All responses must be valid JSON
+2. Keep each point concise and clear
+3. Use proper JSON escaping for special characters
+4. Include at least one item in each section
+5. Avoid nested objects unless absolutely necessary
+6. Keep formatting consistent with the template
+
+Example:
+{
+    "response": {
+        "🎯 Recommended Features": [
+            "Implement automated data validation pipeline",
+            "Add real-time monitoring dashboard"
+        ],
+        "💡 Feature Selection Tips": [
+            "Prioritize features based on business impact",
+            "Consider implementation complexity"
+        ],
+        "⚠️ Important Considerations": [
+            "Ensure PDPA compliance for all data processing",
+            "Plan for scalability from the start"
+        ]
+    },
+    "metadata": {
+        "topic": "ML Pipeline Design",
+        "timestamp": "2025-07-14T09:57:15Z",
+        "context": "Thai Insurance ML Pipeline Development"
+    }
+}
+
+[Your question or prompt goes here]

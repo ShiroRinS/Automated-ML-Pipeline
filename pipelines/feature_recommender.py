@@ -12,12 +12,14 @@ class FeatureRecommender:
             genai.configure(api_key=GEMINI_API_KEY)
             self._gemini_model = genai.GenerativeModel("gemini-2.5-flash")
         
-    def preprocess_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def preprocess_data(self, data: pd.DataFrame, categorical_encoding: Dict[str, str] = None) -> pd.DataFrame:
         """
         Preprocess the data by handling missing values and encoding categorical variables
         
         Args:
             data: Input DataFrame
+            categorical_encoding: Dictionary mapping column names to their encoding method 
+                                ('label', 'onehot', or 'exclude'). Default is 'exclude' for all categorical columns.
             
         Returns:
             Preprocessed DataFrame
@@ -35,20 +37,33 @@ class FeatureRecommender:
             print("\nMissing values in features:")
             print("\n".join(missing_info))
         
+        # Identify numeric and categorical features first, excluding obvious non-numeric columns
+        print("Identifying feature types...")
+        exclusions = ['PassengerId', 'Name', 'Ticket', 'Cabin']
+        categorical_features = data_clean.select_dtypes(include=['object', 'category']).columns.difference(exclusions)
+        numeric_features = data_clean.select_dtypes(include=['int64', 'float64']).columns.difference(exclusions)
+        print(f"Categorical features: {list(categorical_features)}")
+        print(f"Numeric features: {list(numeric_features)}")
+        
         # Remove problematic features
-        print("\nRemoving problematic features...")
-        # Remove high missing value columns (>50% missing)
+        print("\nAnalyzing data quality...")
+        # Get missing value statistics
+        missing_stats = {}
         for col in data_clean.columns:
-            if data_clean[col].isna().sum() / len(data_clean) > 0.5:
-                data_clean = data_clean.drop(col, axis=1)
-                print(f"Dropped {col} due to high missing values")
-        
-        # Get feature list for training
-        features_to_use = [col for col in data_clean.columns if col not in ['PassengerId', 'Name', 'Ticket', 'Cabin']]
-        print(f"Features to use: {features_to_use}")
-        data_clean = data_clean[features_to_use]
-        
-        # Identify numeric and categorical features
+            missing_count = data_clean[col].isna().sum()
+            if missing_count > 0:
+                missing_pct = (missing_count / len(data_clean)) * 100
+                missing_stats[col] = missing_pct
+                print(f"{col}: {missing_count} missing values ({missing_pct:.2f}%)")
+                
+                # Drop columns with too many missing values (>50%)
+                if missing_pct > 50:
+                    data_clean = data_clean.drop(col, axis=1)
+                    if col in categorical_features:
+                        categorical_features = categorical_features.drop(col)
+                    if col in numeric_features:
+                        numeric_features = numeric_features.drop(col)
+                    print(f"Dropped {col} due to high missing values (>{missing_pct:.1f}%)")
         print("Identifying feature types...")
         categorical_features = data_clean.select_dtypes(include=['object']).columns
         numeric_features = data_clean.select_dtypes(include=['int64', 'float64']).columns
@@ -62,38 +77,69 @@ class FeatureRecommender:
             median_val = data_clean[feature].median()
             data_clean[feature] = data_clean[feature].fillna(median_val)
         
+        # Initialize categorical_encoding if not provided
+        if categorical_encoding is None:
+            categorical_encoding = {}
+            
         # Handle categorical features
         print("Handling categorical features...")
+        features_to_drop = []
+        
         for feature in categorical_features:
             print(f"Processing categorical feature: {feature}")
+            # Fill missing values
             mode_val = data_clean[feature].mode()[0]
             data_clean[feature] = data_clean[feature].fillna(mode_val)
-            # Encode categorical variables
-            if feature == 'Sex':
-                data_clean[feature] = data_clean[feature].map({'male': 1, 'female': 0})
-            elif feature == 'Embarked':
-                data_clean[feature] = data_clean[feature].map({'C': 0, 'Q': 1, 'S': 2})
+            
+            # Get encoding method for this feature (default to 'exclude')
+            encoding_method = categorical_encoding.get(feature, 'exclude')
+            
+            if encoding_method == 'exclude':
+                features_to_drop.append(feature)
+                print(f"Excluding feature: {feature}")
+            elif encoding_method == 'label':
+                # Label encoding
+                unique_values = data_clean[feature].unique()
+                encoding_map = {val: idx for idx, val in enumerate(sorted(unique_values))}
+                data_clean[feature] = data_clean[feature].map(encoding_map)
+                print(f"Label encoded feature: {feature}")
+            elif encoding_method == 'onehot':
+                # One-hot encoding
+                one_hot = pd.get_dummies(data_clean[feature], prefix=feature)
+                data_clean = pd.concat([data_clean, one_hot], axis=1)
+                features_to_drop.append(feature)  # Drop original column after one-hot encoding
+                print(f"One-hot encoded feature: {feature}")
         
         return data_clean
     
-    def get_feature_importance(self, data: pd.DataFrame) -> List[Dict[str, float]]:
+    def get_feature_importance(self, data: pd.DataFrame, target_column: str = None) -> List[Dict[str, float]]:
         """
         Calculate feature importance using Random Forest
         
         Args:
             data: Preprocessed DataFrame
+            target_column: Name of target column. If None, uses last column.
             
         Returns:
             List of dictionaries containing feature names and importance scores
         """
         print("Training random forest model...")
         
-        # Separate features and target
-        if 'Survived' in data.columns:
-            X = data.drop('Survived', axis=1)
-            y = data['Survived']
+        # Use specified target column or assume last column if not specified
+        target_col = target_column if target_column else (data.columns[-1] if len(data.columns) > 0 else None)
+        
+        if target_col and target_col in data.columns:
+            print(f"Using '{target_col}' as target variable")
+            X = data.drop(target_col, axis=1)
+            y = data[target_col]
+            
+            # Convert target to numeric if it's categorical
+            if y.dtype == 'object' or y.dtype == 'category':
+                print(f"Converting categorical target '{target_col}' to numeric")
+                # Use label encoding for categorical target
+                y = pd.Categorical(y).codes
         else:
-            # If no target column, use all features
+            print("No target variable identified, using all features")
             X = data
             y = np.zeros(len(data))  # Dummy target
         
@@ -114,12 +160,13 @@ class FeatureRecommender:
         
         return importance_scores
     
-    async def get_recommendations(self, data: pd.DataFrame) -> Dict[str, Any]:
+    async def get_recommendations(self, data: pd.DataFrame, categorical_encoding: Dict[str, str] = None) -> Dict[str, Any]:
         """
         Get feature recommendations
         
         Args:
             data: Input DataFrame
+            categorical_encoding: Dictionary mapping column names to their encoding method
             
         Returns:
             Dictionary containing recommendations and feature importance
@@ -128,7 +175,7 @@ class FeatureRecommender:
             print("Starting feature recommendations...")
             
             # Preprocess data
-            data_clean = self.preprocess_data(data)
+            data_clean = self.preprocess_data(data, categorical_encoding)
             
             print("Getting Gemini suggestions...")
             # Get Gemini suggestions
@@ -155,13 +202,19 @@ class FeatureRecommender:
                     
                     feature_descriptions.append(description)
                 
+                # Create a more detailed dataset summary
+                target_info = f"Target Variable: {data_clean.columns[-1]}" if len(data_clean.columns) > 0 else "No target variable identified"
+                
                 data_description = f"""
                 Dataset Summary:
                 - Total Samples: {len(data_clean)}
-                - Features: {', '.join(data_clean.columns)}
-                - Numeric Features: {', '.join(numeric_features)}
-                - Categorical Features: {', '.join(categorical_features)}
-                - Target Variable: {data_clean.columns[-1]} (assumed last column)
+                - Total Features: {len(data_clean.columns)}
+                - Numeric Features ({len(numeric_features)}): {', '.join(numeric_features)}
+                - Categorical Features ({len(categorical_features)}): {', '.join(categorical_features)}
+                - {target_info}
+                
+                Data Quality:
+                {chr(10).join([f'- {col}: {pct:.1f}% missing' for col, pct in missing_stats.items()])} 
                 
                 Feature Details:
                 {chr(10).join(feature_descriptions)}
@@ -222,15 +275,29 @@ Ensure your response includes all three sections with exact headings and emojis.
                 
             try:
                 print("Making Gemini API call...")
-                response = self._gemini_model.generate_content(prompt, generation_config={
-                    "temperature": 0.1,  # Lower temperature for more deterministic output
-                    "top_p": 0.95,      # Higher top_p to ensure we get complete sections
-                    "top_k": 40,
-                    "max_output_tokens": 2048,  # Increased to ensure we get complete output
-                    "stop_sequences": ["\n\n\n"]  # Stop at triple newlines to better handle markdown
-                })
+                print("Prompt sent to Gemini:")
+                print(prompt)
+                response = self._gemini_model.generate_content(
+                    prompt,
+                    generation_config={
+                        "temperature": 0.1,
+                        "top_p": 0.95,
+                        "top_k": 40,
+                        "max_output_tokens": 2048,
+                        "stop_sequences": ["\n\n\n"]
+                    },
+                    safety_settings={
+                        "HARASSMENT": "block_none",
+                        "HATE_SPEECH": "block_none",
+                        "DANGEROUS_CONTENT": "block_none",
+                        "SEXUAL": "block_none",
+                        "MEDICAL": "block_none"
+                    }
+                )
                 print("Got Gemini response")
                 suggestions = response.text
+                print("Full Gemini response:")
+                print(suggestions)
                 print(f"Suggestion text length: {len(suggestions)}")
                 
                 # Validate the response has all required sections

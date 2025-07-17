@@ -8,3 +8,20 @@ timestamp,message,accuracy
 2025-07-02 14:33:58,"Data loaded: 891 rows, 8 columns",
 2025-07-02 14:33:58,Model trained successfully,0.8212290502793296
 2025-07-02 14:33:58,Artifacts saved with date: 20250702,
+2025-07-15 14:44:37,Training started,
+2025-07-15 14:44:37,Training failed: [Errno 2] No such file or directory: 'data/raw_data.csv',
+2025-07-15 14:44:59,Training started,
+2025-07-15 14:44:59,"Data loaded: 891 rows, 12 columns",
+2025-07-15 14:44:59,Model trained successfully,0.7988826815642458
+2025-07-15 14:44:59,Training failed: [Errno 2] No such file or directory: 'artifacts/model_20250715.pkl',
+2025-07-15 14:53:46,Training started,
+2025-07-15 14:53:46,"Data loaded: 891 rows, 12 columns",
+2025-07-15 15:02:39,Training started,
+2025-07-15 15:02:39,"Data loaded: 891 rows, 12 columns",
+2025-07-15 15:02:39,"Training failed: could not convert string to float: 'Potter, Mrs. Thomas Jr (Lily Alexenia Wilson)'",
+2025-07-15 15:06:06,Training started,
+2025-07-15 15:06:06,"Data loaded: 891 rows, 12 columns",
+2025-07-15 15:06:06,"Training failed: Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.",
+2025-07-15 15:06:35,Training started,
+2025-07-15 15:06:35,"Data loaded: 891 rows, 12 columns",
+2025-07-15 15:06:35,Training completed successfully,0.7804878048780488
