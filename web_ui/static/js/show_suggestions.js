@@ -93,6 +93,81 @@ function showGeminiSuggestions(suggestions) {
     $('#geminiSuggestions').html(html).show();
 }
 
+// Update selected features list
+function updateSelectedFeatures() {
+    var selectedFeatures = $('.feature-item.selected').map(function() {
+        return $(this).find('h6').text();
+    }).get();
+    
+    // Update the count
+    $('#selectedCount').text(selectedFeatures.length + ' selected');
+    
+    // Update the selected features display
+    var html = '';
+    selectedFeatures.forEach(function(feature) {
+        html += `
+            <div class="badge bg-primary p-2 me-2 mb-2">
+                ${feature}
+                <button type="button" class="btn-close btn-close-white ms-2" 
+                    onclick="deselectFeature('${feature}')"></button>
+            </div>
+        `;
+    });
+    $('#selectedFeatures').html(html);
+    
+    // Show/hide the no features message
+    if (selectedFeatures.length === 0) {
+        $('#noFeaturesSelected').show();
+    } else {
+        $('#noFeaturesSelected').hide();
+    }
+}
+
+// Deselect a feature
+function deselectFeature(featureName) {
+    $(`.feature-item:contains('${featureName}')`).removeClass('selected');
+    updateSelectedFeatures();
+}
+
+// Initialize feature selection functionality
+function initializeFeatureSelection() {
+    console.log('Initializing feature selection...');
+    
+    // Show numeric features only
+    $('#showNumeric').click(function() {
+        $('.feature-item').hide();
+        $('.feature-item[data-type="numeric"]').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
+    });
+    
+    // Show categorical features only
+    $('#showCategorical').click(function() {
+        $('.feature-item').hide();
+        $('.feature-item[data-type="categorical"]').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
+    });
+    
+    // Show all features
+    $('#showAll').click(function() {
+        $('.feature-item').show();
+        $('.btn-group .btn').removeClass('active');
+        $(this).addClass('active');
+    });
+    
+    // Initialize feature click handlers
+    $('.feature-item').on('click', function() {
+        console.log('Feature clicked:', $(this).find('h6').text());
+        $(this).toggleClass('selected');
+        updateSelectedFeatures();
+    });
+    
+    // Initially show all features and highlight the 'All' button
+    $('#showAll').addClass('active');
+    $('.feature-item').show();
+}
+
 // Initialize page
 $(document).ready(function() {
     console.log('Document ready');
@@ -102,12 +177,18 @@ $(document).ready(function() {
         window.initial_recommendations = null;
     }
     
-    // Check for data analysis
-    if (typeof data_analysis !== 'undefined' && data_analysis) {
-        console.log('Data analysis:', data_analysis);
-        showDataSummary(data_analysis);
-        showAvailableFeatures(data_analysis);
-    } else {
+// Check for data analysis
+if (typeof data_analysis !== 'undefined' && data_analysis) {
+    console.log('Data analysis:', data_analysis);
+    showDataSummary(data_analysis);
+    showAvailableFeatures(data_analysis);
+    
+    // Initialize feature selection handlers
+    $('.feature-item').on('click', function() {
+        $(this).toggleClass('selected');
+        updateSelectedFeatures();
+    });
+}
         console.log('No data analysis available');
     }
     

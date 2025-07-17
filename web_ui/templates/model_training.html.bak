@@ -12,14 +12,440 @@
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
 
-<!-- Initialize required variables -->
+<!-- Initialize required variables and functions -->
 <script>
-// Initialize data analysis and recommendations
-var data_analysis = {% if data_analysis %}{{ data_analysis|tojson|safe }}{% else %}null{% endif %};
-var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}null{% endif %};
+    // Global variables initialization
+    var data_analysis = {% if data_analysis %}{{ data_analysis|tojson|safe }}{% else %}null{% endif %};
+    var initial_recommendations = {% if initial_recommendations %}{{ initial_recommendations|tojson|safe }}{% else %}{}{% endif %};
+    var selected_features = [];
+    var target_column = null;
+    var excluded_columns = [];
+    var categorical_encoding = {
+        'label': 'Label Encoding',
+        'onehot': 'One-Hot Encoding'
+    };
+    var DEBUG = true;
+
+    // All function definitions first
+    function updateEncodingOptions() {
+        if (!data_analysis || !data_analysis.column_info) return;
+        
+        console.log('Updating encoding options...');
+        
+        var selectedCategoricalFeatures = $('.feature-item.selected[data-type="categorical"]')
+            .map(function() { return $(this).data('feature'); }).get();
+        
+        console.log('Selected categorical features:', selectedCategoricalFeatures);
+        
+        var html = '';
+        if (selectedCategoricalFeatures.length > 0) {
+            html += '<div class="alert alert-info mb-3">Select encoding method for each categorical feature:</div>';
+            
+            selectedCategoricalFeatures.forEach(function(feature) {
+                html += `
+                    <div class="mb-3 border p-3 rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0"><strong>${feature}</strong></label>
+                        </div>
+                        <select class="form-select encoding-select" data-feature="${feature}">
+                            <option value="label">Label Encoding (Convert categories to numbers)</option>
+                            <option value="onehot">One-Hot Encoding (Create binary columns)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            Label encoding is memory efficient but may imply ordering. One-hot encoding is better for truly categorical data.
+                        </small>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div class="alert alert-info">Select categorical features to configure encoding options</div>';
+        }
+        
+        $('#categoricalEncodingOptions').html(html);
+    }
+
+    function initializeFeatureFiltering() {
+        // Show numeric features only
+        $('#showNumeric').click(function() {
+            $('.feature-item').hide();
+            $('.feature-item[data-type="numeric"]').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Show categorical features only
+        $('#showCategorical').click(function() {
+            $('.feature-item').hide();
+            $('.feature-item[data-type="categorical"]').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Show all features
+        $('#showAll').click(function() {
+            $('.feature-item').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Initially show all features and highlight the 'All' button
+        $('#showAll').addClass('active');
+    }
+
+    function updateSelectedFeatures() {
+        var selected = [];
+        $('.feature-item.selected').each(function() {
+            var importance = $(this).data('importance') || 0;
+            selected.push({
+                name: $(this).data('feature'),
+                importance: importance
+            });
+        });
+        
+        // Sort by importance
+        selected.sort((a, b) => b.importance - a.importance);
+        
+        // Update UI
+        updateSelectedFeaturesList(selected);
+        $('#selectedCount').text(`${selected.length} selected`);
+        
+        // Update encoding options
+        updateEncodingOptions();
+        
+        // Show/hide no features message
+        if (selected.length === 0) {
+            $('#noFeaturesSelected').show();
+        } else {
+            $('#noFeaturesSelected').hide();
+        }
+    }
+
+// Function to initialize feature selection process
+function initializeFeatureSelection() {
+        console.log('Initializing feature selection...');
+        
+        // Initialize feature filtering
+        initializeFeatureFiltering();
+        
+        // Initialize feature click handlers
+        $('.feature-item').off('click').on('click', function() {
+            console.log('Feature clicked:', $(this).find('h6').text());
+            $(this).toggleClass('selected');
+            updateSelectedFeatures();
+        });
+        
+        // Initially show all features
+        $('.feature-item').show();
+    }
+
+    function updateSelectedFeaturesList(features) {
+        var html = '';
+        features.forEach(function(feature) {
+            const importance = feature.importance ? (feature.importance * 100).toFixed(2) : '';
+            const importanceDisplay = importance ? `<small class="ms-2 opacity-75">${importance}%</small>` : '';
+            html += `
+                <div class="badge bg-primary p-2 d-flex align-items-center">
+                    <span>${feature.name}</span>
+                    ${importanceDisplay}
+                    <button type="button" class="btn-close btn-close-white ms-2" 
+                        data-feature="${feature.name}" 
+                        onclick="deselectFeature('${feature.name}')"></button>
+                </div>
+            `;
+        });
+        $('#selectedFeatures').html(html || '');
+    }
+
+    function deselectFeature(featureName) {
+        $(`.feature-item[data-feature="${featureName}"]`).removeClass('selected');
+        updateSelectedFeatures();
+    }
+
+    function showDataSummary(analysis) {
+        if (!analysis) return;
+        
+        // Update dataset size badge
+        $('#datasetSize').text(`${analysis.total_rows} rows × ${analysis.total_columns} columns`);
+        
+        // Show basic statistics
+        let basicStatsHtml = `
+            <ul class="list-unstyled mb-0">
+                <li><strong>Total Features:</strong> ${analysis.column_info.numeric.length + analysis.column_info.categorical.length}</li>
+                <li><strong>Numeric Features:</strong> ${analysis.column_info.numeric.length}</li>
+                <li><strong>Categorical Features:</strong> ${analysis.column_info.categorical.length}</li>
+                <li><strong>Excluded Columns:</strong> ${analysis.column_info.excluded.length}</li>
+            </ul>
+        `;
+        $('#basicStats').html(basicStatsHtml);
+    }
+
+    function showAvailableFeatures(analysis) {
+        if (!analysis) return;
+        
+        let html = '';
+        
+        // Add numeric features
+        analysis.column_info.numeric.forEach(col => {
+            const stats = analysis.numeric_stats[col];
+            html += `
+                <div class="list-group-item feature-item" data-type="numeric" data-feature="${col}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${col}</h6>
+                        <span class="badge bg-primary">Numeric</span>
+                    </div>
+                    <p class="mb-1 small">Range: ${stats.min} to ${stats.max}</p>
+                    <small class="text-muted">Mean: ${stats.mean.toFixed(2)} | Std: ${stats.std.toFixed(2)}</small>
+                </div>
+            `;
+        });
+        
+        // Add categorical features
+        analysis.column_info.categorical.forEach(col => {
+            const stats = analysis.categorical_stats[col];
+            html += `
+                <div class="list-group-item feature-item" data-type="categorical" data-feature="${col}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${col}</h6>
+                        <span class="badge bg-success">Categorical</span>
+                    </div>
+                    <p class="mb-1 small">${stats.unique_values} unique values</p>
+                    <small class="text-muted">Most common: ${stats.most_common} (${stats.most_common_pct.toFixed(1)}%)</small>
+                </div>
+            `;
+        });
+        
+        $('#availableFeatures').html(html);
+    }
+
+    // Document ready handler
+    $(document).ready(function() {
+        if (data_analysis) {
+            console.log('Processing data analysis:', data_analysis);
+            
+            // Show data summary
+            showDataSummary(data_analysis);
+            showAvailableFeatures(data_analysis);
+            
+            // Initialize UI components with a small delay
+            setTimeout(function() {
+                initializeFeatureSelection();
+                updateEncodingOptions();
+                
+                // Show target column selection if needed
+                if (!target_column) {
+                    showTargetColumnSelection(data_analysis);
+                }
+            }, 100);
+        } else {
+            $('#geminiSuggestions').html('<div class="alert alert-warning">Please load data first</div>');
+            $('#featureSpinner').hide();
+            $('#availableFeatures').html('<div class="alert alert-warning">No data loaded</div>').show();
+        }
+    });
+
+    // Initialize tooltips
+    $('[data-bs-toggle="tooltip"]').tooltip();
+
+    // Function to update encoding options based on selected features
+// Function to update encoding options based on selected features
+function updateEncodingOptions() {
+        if (!data_analysis || !data_analysis.column_info) return;
+        
+        console.log('Updating encoding options...');
+        
+        var selectedCategoricalFeatures = $('.feature-item.selected[data-type="categorical"]')
+            .map(function() { return $(this).data('feature'); }).get();
+        
+        console.log('Selected categorical features:', selectedCategoricalFeatures);
+        
+        var html = '';
+        if (selectedCategoricalFeatures.length > 0) {
+            html += '<div class="alert alert-info mb-3">Select encoding method for each categorical feature:</div>';
+            
+            selectedCategoricalFeatures.forEach(function(feature) {
+                html += `
+                    <div class="mb-3 border p-3 rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0"><strong>${feature}</strong></label>
+                        </div>
+                        <select class="form-select encoding-select" data-feature="${feature}">
+                            <option value="label">Label Encoding (Convert categories to numbers)</option>
+                            <option value="onehot">One-Hot Encoding (Create binary columns)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            Label encoding is memory efficient but may imply ordering. One-hot encoding is better for truly categorical data.
+                        </small>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div class="alert alert-info">Select categorical features to configure encoding options</div>';
+        }
+        
+        $('#categoricalEncodingOptions').html(html);
+    }
+
+    // Function to initialize feature selection
+    function initializeFeatureSelection() {
+        console.log('Initializing feature selection...');
+        
+        // Initialize feature filtering
+        initializeFeatureFiltering();
+        
+        // Initialize feature click handlers
+        $('.feature-item').off('click').on('click', function() {
+            console.log('Feature clicked:', $(this).find('h6').text());
+            $(this).toggleClass('selected');
+            updateSelectedFeatures();
+        });
+    }
+
+    // Document ready handler
+    $(document).ready(function() {
+        if (data_analysis) {
+            console.log('Processing data analysis:', data_analysis);
+            
+            // Show data summary
+            showDataSummary(data_analysis);
+            showAvailableFeatures(data_analysis);
+            
+            // Initialize UI components
+            setTimeout(function() {
+                initializeFeatureSelection();
+                updateEncodingOptions();
+                
+                // Show target column selection if needed
+                if (!target_column) {
+                    showTargetColumnSelection(data_analysis);
+                }
+            }, 100);
+        } else {
+            $('#geminiSuggestions').html('<div class="alert alert-warning">Please load data first</div>');
+            $('#featureSpinner').hide();
+            $('#availableFeatures').html('<div class="alert alert-warning">No data loaded</div>').show();
+        }
+    });
+    
+// Function to update encoding options based on selected features
+    function updateEncodingOptions() {
+        if (!data_analysis || !data_analysis.column_info) return;
+        
+        console.log('Updating encoding options...');
+        
+        var selectedCategoricalFeatures = $('.feature-item.selected[data-type="categorical"]')
+            .map(function() { return $(this).data('feature'); }).get();
+        
+        console.log('Selected categorical features:', selectedCategoricalFeatures);
+        
+        var html = '';
+        if (selectedCategoricalFeatures.length > 0) {
+            html += '<div class="alert alert-info mb-3">Select encoding method for each categorical feature:</div>';
+            
+            selectedCategoricalFeatures.forEach(function(feature) {
+                html += `
+                    <div class="mb-3 border p-3 rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0"><strong>${feature}</strong></label>
+                        </div>
+                        <select class="form-select encoding-select" data-feature="${feature}">
+                            <option value="label">Label Encoding (Convert categories to numbers)</option>
+                            <option value="onehot">One-Hot Encoding (Create binary columns)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            Label encoding is memory efficient but may imply ordering. One-hot encoding is better for truly categorical data.
+                        </small>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div class="alert alert-info">Select categorical features to configure encoding options</div>';
+        }
+        
+        $('#categoricalEncodingOptions').html(html);
+        
+        // Initialize tooltips if using Bootstrap 5
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            $('[data-bs-toggle="tooltip"]').tooltip();
+        }
+    }
     
     // Debug flag
     var DEBUG = true;
+    
+    // Feature selection initialization function
+    function initializeFeatureSelection() {
+        console.log('Initializing feature selection...');
+        
+        // Show numeric features only
+        $('#showNumeric').click(function() {
+            $('.feature-item').hide();
+            $('.feature-item[data-type="numeric"]').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Show categorical features only
+        $('#showCategorical').click(function() {
+            $('.feature-item').hide();
+            $('.feature-item[data-type="categorical"]').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Show all features
+        $('#showAll').click(function() {
+            $('.feature-item').show();
+            $('.btn-group .btn').removeClass('active');
+            $(this).addClass('active');
+        });
+        
+        // Initialize feature click handlers
+        $('.feature-item').off('click').on('click', function() {
+            console.log('Feature clicked:', $(this).find('h6').text());
+            $(this).toggleClass('selected');
+            updateSelectedFeatures();
+        });
+        
+        // Initially show all features and highlight the 'All' button
+        $('#showAll').addClass('active');
+        $('.feature-item').show();
+    }
+    
+    // Update selected features
+    function updateSelectedFeatures() {
+        var selectedFeatures = $('.feature-item.selected').map(function() {
+            return $(this).find('h6').text();
+        }).get();
+        
+        // Update the count
+        $('#selectedCount').text(selectedFeatures.length + ' selected');
+        
+        // Update the selected features display
+        var html = '';
+        selectedFeatures.forEach(function(feature) {
+            html += `
+                <div class="badge bg-primary p-2 me-2 mb-2">
+                    ${feature}
+                    <button type="button" class="btn-close btn-close-white ms-2" 
+                        onclick="deselectFeature('${feature}')"></button>
+                </div>
+            `;
+        });
+        $('#selectedFeatures').html(html);
+        
+        // Show/hide the no features message
+        if (selectedFeatures.length === 0) {
+            $('#noFeaturesSelected').show();
+        } else {
+            $('#noFeaturesSelected').hide();
+        }
+    }
+    
+    // Deselect a feature
+    function deselectFeature(featureName) {
+        $(`.feature-item:contains('${featureName}')`).removeClass('selected');
+        updateSelectedFeatures();
+    }
     
     // Log data analysis if available
     if (DEBUG) {
@@ -84,6 +510,32 @@ var initial_recommendations = {% if initial_recommendations %}{{ initial_recomme
         </div>
     </div>
     
+<!-- Feature Settings Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Feature Settings</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Categorical Encoding</h6>
+                    <div id="categoricalEncodingOptions">
+                        <!-- Will be populated dynamically -->
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Feature Scaling</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="standardScaling" checked>
+                        <label class="form-check-label" for="standardScaling">
+                            Apply standard scaling to numeric features
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Feature Selection Section -->
     <div class="card mb-4">
         <div class="card-header">
@@ -320,6 +772,18 @@ var initial_recommendations = {% if initial_recommendations %}{{ initial_recomme
     cursor: pointer;
     user-select: none;
     transition: all 0.2s ease;
+    padding: 10px;
+    border-left: 3px solid transparent;
+}
+
+.feature-item:hover {
+    background-color: #f8f9fa;
+    border-left: 3px solid #0d6efd;
+}
+
+.feature-item.selected {
+    background-color: #e7f0ff;
+    border-left: 3px solid #0d6efd;
 }
 .feature-item:hover {
     background-color: #f8f9fa;
@@ -420,14 +884,21 @@ $(document).ready(function() {
         
         // Show data summary
         showDataSummary(data_analysis);
-        
-        // Show available features
         showAvailableFeatures(data_analysis);
         
-        // Initialize feature selection
-        initializeFeatureSelection();
+        // Initialize feature selection after a short delay to ensure DOM is ready
+        setTimeout(function() {
+            if (typeof initializeFeatureSelection === 'function') {
+                initializeFeatureSelection();
+            } else {
+                console.error('Feature selection initialization failed: function not found');
+            }
+        }, 100);
         
         // Show target column selection if needed
+        if (!target_column) {
+            showTargetColumnSelection(data_analysis);
+        }
         if (!target_column) {
             showTargetColumnSelection(data_analysis);
         }
@@ -473,6 +944,7 @@ $(document).ready(function() {
     });
 });
 
+// Function to display data summary
 function showDataSummary(analysis) {
     // Update dataset size badge
     $('#datasetSize').text(`${analysis.total_rows} rows × ${analysis.total_columns} columns`);
@@ -549,6 +1021,7 @@ function showDataSummary(analysis) {
     $('#dataQuality').html(qualityHtml);
 }
 
+// Function to show available features
 function showAvailableFeatures(analysis) {
     let html = '';
     
@@ -623,6 +1096,7 @@ function showFeatureImportance(importances) {
     initTooltips();
 }
 
+// Function to initialize feature filtering
 function initializeFeatureFiltering() {
     // Show numeric features only
     $('#showNumeric').click(function() {
@@ -700,12 +1174,14 @@ function loadFeaturesFromImportance(importances) {
     loadFeatures(features);
 }
 
+// Function to update the list of selected features
 function updateSelectedFeatures() {
     var selected = [];
     $('.feature-item.selected').each(function() {
+        var importance = $(this).data('importance') || 0; // Default to 0 if not set
         selected.push({
             name: $(this).data('feature'),
-            importance: parseFloat($(this).data('importance'))
+            importance: importance
         });
     });
     
@@ -716,6 +1192,9 @@ function updateSelectedFeatures() {
     updateSelectedFeaturesList(selected);
     $('#selectedCount').text(`${selected.length} selected`);
     
+    // Update encoding options
+    updateEncodingOptions();
+    
     // Show/hide no features message
     if (selected.length === 0) {
         $('#noFeaturesSelected').show();
@@ -724,14 +1203,16 @@ function updateSelectedFeatures() {
     }
 }
 
+// Function to update the displayed list of selected features
 function updateSelectedFeaturesList(features) {
     var html = '';
     features.forEach(function(feature) {
-        const importance = (feature.importance * 100).toFixed(2);
+        const importance = feature.importance ? (feature.importance * 100).toFixed(2) : '';
+        const importanceDisplay = importance ? `<small class="ms-2 opacity-75">${importance}%</small>` : '';
         html += `
             <div class="badge bg-primary p-2 d-flex align-items-center">
                 <span>${feature.name}</span>
-                <small class="ms-2 opacity-75">${importance}%</small>
+                ${importanceDisplay}
                 <button type="button" class="btn-close btn-close-white ms-2" 
                     data-feature="${feature.name}" 
                     onclick="deselectFeature('${feature.name}')"></button>
@@ -741,6 +1222,7 @@ function updateSelectedFeaturesList(features) {
     $('#selectedFeatures').html(html || '');
 }
 
+// Function to deselect a feature
 function deselectFeature(featureName) {
     $(`.list-group-item:contains('${featureName}')`).removeClass('selected');
     updateSelectedFeatures();

@@ -70,7 +70,7 @@
             </div>
         </div>
 
-        <!-- Cleaning Options -->
+    <!-- Cleaning Options -->
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header">
@@ -82,6 +82,17 @@
                             <!-- Dynamic suggestions for cleaning -->
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Data Preparation Tools -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Data Preparation Tools</h5>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-outline-secondary mb-2 w-100" id="normalizeBtn">Normalize Data</button>
+                    <button class="btn btn-outline-secondary mb-2 w-100" id="scaleBtn">Scale Features</button>
                 </div>
             </div>
         </div>
@@ -244,6 +255,15 @@ $(document).ready(function() {
         saveCleanedData();
     });
 
+    // Data preparation tools
+    $('#normalizeBtn').click(function() {
+        prepareData('normalize');
+    });
+
+    $('#scaleBtn').click(function() {
+        prepareData('scale');
+    });
+
     // Proceed button
     $('#proceedBtn').click(function() {
         window.location.href = '/train?cleaned=true';
@@ -353,6 +373,26 @@ function saveCleanedData() {
             alert('Data saved successfully!');
         } else {
             alert('Error saving data: ' + response.error);
+        }
+    });
+}
+
+function prepareData(action) {
+    $.ajax({
+        url: '/api/prepare-data',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ action: action }),
+        success: function(response) {
+            if (response.success) {
+                updatePreview(response.preview);
+                alert(response.message);
+            } else {
+                alert('Error preparing data: ' + response.error);
+            }
+        },
+        error: function() {
+            alert('Error preparing data');
         }
     });
 }

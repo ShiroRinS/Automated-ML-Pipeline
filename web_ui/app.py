@@ -67,9 +67,12 @@ async def train_model():
         csv_files = list(data_path.glob("*.csv"))
         
         if not csv_files:
-            return await render_template('model_training.html',
+            print("No CSV files found in training data directory")
+            return await render_template('training.html',
                                 error="No CSV files found in the training data directory.",
-                                data_loaded=False)
+                                data_loaded=False,
+                                data_analysis=None,
+                                initial_recommendations=None)
         
         # Use the most recently modified CSV file
         data_path = max(csv_files, key=lambda x: x.stat().st_mtime)
@@ -80,6 +83,8 @@ async def train_model():
             # Load data
             data = pd.read_csv(data_path)
             print("Data loaded successfully")
+            print(f"Data shape: {data.shape}")
+            print(f"Columns: {data.columns.tolist()}")
             
             # Get column information
             column_info = {
@@ -98,6 +103,9 @@ async def train_model():
             
             # Analyze data columns and types
             print("Analyzing data structure...")
+            print(f"Numeric columns: {column_info['numeric']}")
+            print(f"Categorical columns: {column_info['categorical']}")
+            print(f"Excluded columns: {column_info['excluded']}")
             
             # Get basic statistics for numeric columns
             numeric_stats = {}
@@ -133,13 +141,25 @@ async def train_model():
             # Add timestamp to data analysis
             data_analysis['timestamp'] = str(pd.Timestamp.now())
             
+            # Debug: Print final data_analysis
+            print("\nFinal data_analysis structure:")
+            print(f"Keys: {data_analysis.keys()}")
+            print(f"Column info keys: {data_analysis['column_info'].keys()}")
+            print(f"Has numeric stats: {bool(data_analysis['numeric_stats'])}")
+            print(f"Has categorical stats: {bool(data_analysis['categorical_stats'])}")
+            
             # Prepare initial recommendations (empty for now)
             initial_recommendations = {
                 'feature_importances': [],
                 'raw_suggestions': None
             }
             
-            return await render_template('model_training.html',
+            print("\nPreparing to render template with:")
+            print(f"data_loaded=True")
+            print(f"data_analysis keys: {data_analysis.keys()}")
+            print(f"initial_recommendations: {initial_recommendations}")
+            
+            return await render_template('training.html',
                                     data_loaded=True,
                                     data_analysis=data_analysis,
                                     initial_recommendations=initial_recommendations)
@@ -147,16 +167,20 @@ async def train_model():
         except Exception as e:
             error_msg = f"Error: {str(e)}"
             print(error_msg)
-            return await render_template('model_training.html',
+            return await render_template('training.html',
                                     error=error_msg,
-                                    data_loaded=False)
+                                    data_loaded=False,
+                                    data_analysis=None,
+                                    initial_recommendations=None)
         
     except Exception as e:
         error_msg = f"Error: {str(e)}"
         print(error_msg)
-        return await render_template('model_training.html',
+        return await render_template('training.html',
                                 error=error_msg,
-                                data_loaded=False)
+                                data_loaded=False,
+                                data_analysis=None,
+                                initial_recommendations=None)
     except Exception as e:
         print(f"Error in train_model route: {str(e)}")
         return await render_template('error.html', error=str(e))
@@ -173,25 +197,43 @@ async def upload_data():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
             
+        # Ensure directory exists
+        data_dir = TRAINING_DIR / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+            
         # Save file temporarily
-        temp_path = TRAINING_DIR / 'data' / 'temp.csv'
+        temp_path = data_dir / 'temp.csv'
         await file.save(temp_path)
         
-        # Load and analyze data
-        analysis = data_cleaning.load_data(str(temp_path))
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis,
-            'columns': [
-                {
-                    'name': col,
-                    'type': analysis['data_types'][col],
-                    'missing_pct': analysis['missing_stats'][col]['percentage']
-                }
-                for col in analysis['data_types'].keys()
-            ]
-        })
+        try:
+            # Load and analyze data
+            analysis = data_cleaning.load_data(str(temp_path))
+            
+            # Extract column information
+            columns = []
+            for col_info in analysis['columns']:
+                columns.append({
+                    'name': col_info['name'],
+                    'type': col_info['type'],
+                    'missing_pct': col_info['missing_pct']
+                })
+            
+            return jsonify({
+                'success': True,
+                'analysis': {
+                    'total_rows': analysis['total_rows'],
+                    'total_columns': analysis['total_columns'],
+                    'quality_score': analysis['quality_score'],
+                    'data_types': {col['name']: col['type'] for col in analysis['columns']},
+                    'missing_stats': {col['name']: {'percentage': col['missing_pct']} for col in analysis['columns']}
+                },
+                'columns': columns
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Error analyzing data: {str(e)}'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -222,6 +264,34 @@ async def apply_cleaning():
             'success': True,
             'preview': preview,
             'history': data_cleaning.get_cleaning_history(),
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/prepare-data', methods=['POST'])
+async def prepare_data():
+    """Prepare data with selected actions like normalization or scaling"""
+    try:
+        data = await request.get_json()
+        action = data.get('action')
+
+        # Use methods from DataCleaningEnhanced or new utility class
+        if action == 'normalize':
+            df = data_cleaning.normalize_data()
+            message = 'Data normalized successfully'
+        elif action == 'scale':
+            df = data_cleaning.scale_features()
+            message = 'Features scaled successfully'
+        else:
+            return jsonify({'success': False, 'error': 'Invalid action'})
+
+        # Generate preview HTML
+        preview = df.head().to_html(classes='table table-striped')
+        
+        return jsonify({
+            'success': True,
+            'preview': preview,
             'message': message
         })
     except Exception as e:

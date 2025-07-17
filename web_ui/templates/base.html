@@ -94,6 +94,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'clean_data' %}active{% endif %}" href="/clean-data">
+                                <i class="fas fa-broom"></i> Clean Data
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'train_model' %}active{% endif %}" href="/train">
                                 <i class="fas fa-brain"></i> Train Model
                             </a>

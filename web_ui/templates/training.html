@@ -1,338 +1,81 @@
 {% extends "base.html" %}
 
-{% block title %}Train Model - ML Pipeline{% endblock %}
-
-{% block page_title %}Train New Model{% endblock %}
-
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Feature Selection</h5>
-                    <p class="text-muted">Click features to select/deselect them for training</p>
-                    
-                    <div id="featureList" class="mb-4 p-3 border rounded bg-light">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="sr-only">Loading...</span>
-                            </div>
-                            <p>Loading available features...</p>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <button class="btn btn-secondary me-2" id="selectAll">
-                            <i class="fas fa-check-double"></i> Select All
-                        </button>
-                        <button class="btn btn-secondary me-2" id="deselectAll">
-                            <i class="fas fa-times"></i> Deselect All
-                        </button>
-                    <button class="btn btn-info me-2" id="selectRecommended">
-                            <i class="fas fa-star"></i> Use Recommended
-                        </button>
-                        <button class="btn btn-primary" id="getGeminiSuggestions">
-                            <i class="fas fa-robot"></i> Get AI Suggestions
-                        </button>
-                    </div>
-                    
-                    <div class="alert alert-info" role="alert">
-                        <i class="fas fa-info-circle"></i>
-                        Selected features: <span id="selectedCount">0</span>
-                    </div>
-                    
-                    <button class="btn btn-primary btn-lg w-100" id="startTraining" disabled>
-                        <i class="fas fa-play"></i> Start Training
-                    </button>
-                </div>
-            </div>
+<div class="container">
+    <h2 class="mb-4">Training Data Overview</h2>
+    
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if data_loaded and data_analysis %}
+    <!-- Dataset Overview -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Dataset Information</h5>
         </div>
-        
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Training Status</h5>
-                    <div id="trainingStatus">
-                        <div class="alert alert-secondary">
-                            <i class="fas fa-info-circle"></i>
-                            Select features and click Start Training to begin
-                        </div>
-                    </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h6>Dataset Size</h6>
+                    <ul class="list-unstyled">
+                        <li>Total Rows: {{ data_analysis.total_rows }}</li>
+                        <li>Total Columns: {{ data_analysis.total_columns }}</li>
+                        <li>Missing Values: {{ data_analysis.missing_values_total }}</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6>Numeric Features</h6>
+                    <ul class="list-unstyled">
+                        {% for col in data_analysis.column_info.numeric %}
+                        <li>{{ col }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6>Categorical Features</h6>
+                    <ul class="list-unstyled">
+                        {% for col in data_analysis.column_info.categorical %}
+                        <li>{{ col }}</li>
+                        {% endfor %}
+                    </ul>
                 </div>
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script>
-$(document).ready(function() {
-    let selectedFeatures = new Set();
-    
-    function loadFeatures() {
-        console.log('Loading features...');
-        $('#featureList').html(`
-            <div class="text-center">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="sr-only">Loading...</span>
+    <!-- Feature Statistics -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Feature Statistics</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% if data_analysis.numeric_stats %}
+                {% for feature, stats in data_analysis.numeric_stats.items() %}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h6 class="mb-0">{{ feature }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled">
+                                <li>Mean: {{ "%.2f"|format(stats.mean) }}</li>
+                                <li>Standard Dev: {{ "%.2f"|format(stats.std) }}</li>
+                                <li>Min: {{ "%.2f"|format(stats.min) }}</li>
+                                <li>Max: {{ "%.2f"|format(stats.max) }}</li>
+                                <li>Missing: {{ stats.missing }} ({{ "%.1f"|format(stats.missing_pct) }}%)</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-                <p class="mt-2">Loading available features...</p>
+                {% endfor %}
+                {% endif %}
             </div>
-        `);
-        
-        $.ajax({
-            url: '/training/features',
-            method: 'GET',
-            timeout: 30000,  // 30 second timeout
-            success: function(response) {
-                console.log('Response:', response);
-                if (response.success && response.features) {
-                    renderFeatures(response.features);
-                } else {
-                    showError('Failed to load features');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error:', error);
-                showError('Failed to load features: ' + error);
-            }
-        });
-    }
-    
-    function showError(message) {
-        $('#featureList').html(`
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-circle"></i> ${message}
-                <button class="btn btn-outline-danger btn-sm ml-3" onclick="loadFeatures()">Retry</button>
-            </div>
-        `);
-    }
-    
-        function renderFeatures(features) {
-            console.log('Rendering features:', features);
-            const container = $('#featureList');
-            container.empty();
-
-            if (!Array.isArray(features)) {
-                showError('Invalid feature data');
-                return;
-            }
-
-            // Create grid layout with two columns
-            const grid = $('<div>').addClass('row g-3');
-
-            features.forEach(feature => {
-                // Create a card for each feature
-                const card = $('<div>').addClass('col-md-6');
-                const cardContent = $('<div>').addClass('card h-100');
-                const cardBody = $('<div>').addClass('card-body');
-
-                // Feature header with checkbox
-                const header = $('<div>').addClass('d-flex align-items-center mb-2');
-                const button = $('<button>')
-                    .addClass('btn btn-outline-primary w-100 text-start feature-btn')
-                    .attr('data-feature', feature.name)
-                    .html(`
-                        <i class="fas fa-check me-2 d-none"></i>
-                        <strong>${feature.name}</strong>
-                    `)
-                    .click(function() {
-                        const btn = $(this);
-                        const icon = btn.find('i');
-                        btn.toggleClass('active');
-                        icon.toggleClass('d-none');
-                        
-                        if (btn.hasClass('active')) {
-                            selectedFeatures.add(feature.name);
-                        } else {
-                            selectedFeatures.delete(feature.name);
-                        }
-                        updateSelectedCount();
-                    });
-
-                // Feature details
-                const details = $('<div>').addClass('mt-2 small');
-                
-                // Basic info for all features
-                details.append(`
-                    <p class="mb-1"><i class="fas fa-database me-1"></i> Type: <span class="badge bg-secondary">${feature.type}</span></p>
-                    <p class="mb-1"><i class="fas fa-fingerprint me-1"></i> Unique Values: ${feature.unique_values}</p>
-                    <p class="mb-1"><i class="fas fa-exclamation-triangle me-1 ${feature.missing > 0 ? 'text-warning' : 'text-success'}"></i> Missing: ${feature.missing} (${feature.missing_pct.toFixed(1)}%)</p>
-                `);
-
-                // Additional stats for numerical features
-                if (feature.type === 'float64' || feature.type === 'int64') {
-                    details.append(`
-                        <div class="mt-2">
-                            <p class="mb-1"><i class="fas fa-chart-line me-1"></i> Statistics:</p>
-                            <div class="ms-3">
-                                <p class="mb-0">Mean: ${feature.mean.toFixed(2)}</p>
-                                <p class="mb-0">Std: ${feature.std.toFixed(2)}</p>
-                                <p class="mb-0">Range: [${feature.min.toFixed(2)} - ${feature.max.toFixed(2)}]</p>
-                            </div>
-                        </div>
-                    `);
-                }
-
-                // Sample values
-                const sampleValues = feature.sample_values.slice(0, 3).join(', ');
-                details.append(`
-                    <div class="mt-2">
-                        <p class="mb-1"><i class="fas fa-eye me-1"></i> Sample Values:</p>
-                        <p class="mb-0 text-muted">${sampleValues}...</p>
-                    </div>
-                `);
-
-                cardBody.append(button, details);
-                cardContent.append(cardBody);
-                card.append(cardContent);
-                grid.append(card);
-            });
-
-            container.append(grid);
-            updateSelectedCount();
-        }
-
-    function updateSelectedCount() {
-        const count = selectedFeatures.size;
-        $('#selectedCount').text(count);
-        $('#startTraining').prop('disabled', count === 0);
-    }
-
-    $('#selectAll').click(function() {
-        $('.feature-btn').addClass('active')
-            .find('i').removeClass('d-none');
-        selectedFeatures = new Set($('.feature-btn').map(function() {
-            return $(this).data('feature');
-        }).get());
-        updateSelectedCount();
-    });
-
-    $('#deselectAll').click(function() {
-        $('.feature-btn').removeClass('active')
-            .find('i').addClass('d-none');
-        selectedFeatures.clear();
-        updateSelectedCount();
-    });
-
-    $('#selectRecommended').click(function() {
-        // Select commonly used features for Titanic dataset
-        const recommended = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare'];
-        $('.feature-btn').each(function() {
-            const btn = $(this);
-            const feature = btn.data('feature');
-            const isRecommended = recommended.includes(feature);
-            btn.toggleClass('active', isRecommended);
-            btn.find('i').toggleClass('d-none', !isRecommended);
-            if (isRecommended) {
-                selectedFeatures.add(feature);
-            } else {
-                selectedFeatures.delete(feature);
-            }
-        });
-        updateSelectedCount();
-    });
-
-    $('#getGeminiSuggestions').click(function() {
-        const button = $(this);
-        const status = $('#trainingStatus');
-        
-        button.prop('disabled', true);
-        status.html(`
-            <div class="alert alert-info">
-                <div class="spinner-border spinner-border-sm" role="status"></div>
-                Getting AI suggestions...
-            </div>
-        `);
-        
-        $.ajax({
-            url: '/api/get-gemini-suggestions',
-            method: 'GET',
-            success: function(response) {
-                if (response.success) {
-                    status.html(`
-                        <div class="alert alert-success">
-                            <h6>AI Suggestions</h6>
-                            <div class="suggestions-content">
-                                ${response.suggestions.replace(/\n/g, '<br>')}
-                            </div>
-                        </div>
-                    `);
-                } else {
-                    status.html(`
-                        <div class="alert alert-danger">
-                            Failed to get AI suggestions: ${response.error}
-                        </div>
-                    `);
-                }
-                button.prop('disabled', false);
-            },
-            error: function(xhr) {
-                status.html(`
-                    <div class="alert alert-danger">
-                        Failed to get AI suggestions: ${xhr.responseJSON?.error || 'Unknown error'}
-                    </div>
-                `);
-                button.prop('disabled', false);
-            }
-        });
-    });
-
-    $('#startTraining').click(function() {
-        const button = $(this);
-        const status = $('#trainingStatus');
-        
-        button.prop('disabled', true);
-        status.html(`
-            <div class="alert alert-info">
-                <div class="spinner-border spinner-border-sm" role="status"></div>
-                Training in progress...
-            </div>
-        `);
-        
-        $.ajax({
-            url: '/training/start',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                features: Array.from(selectedFeatures)
-            }),
-            success: function(response) {
-                if (response.success) {
-                    const result = response.result;
-                    status.html(`
-                        <div class="alert alert-success">
-                            <h6>Training Complete!</h6>
-                            <p>Training ID: ${result.training_id}</p>
-                            <p>Test Score: ${result.results.test_score.toFixed(4)}</p>
-                            <p>CV Score: ${result.results.cv_mean.toFixed(4)}</p>
-                            <a href="/training-detail/${result.training_id}" class="btn btn-info btn-sm">View Details</a>
-                        </div>
-                    `);
-                } else {
-                    status.html(`
-                        <div class="alert alert-danger">
-                            Training failed: ${response.error}
-                        </div>
-                    `);
-                }
-                button.prop('disabled', false);
-            },
-            error: function(xhr) {
-                status.html(`
-                    <div class="alert alert-danger">
-                        Training failed: ${xhr.responseJSON?.error || 'Unknown error'}
-                    </div>
-                `);
-                button.prop('disabled', false);
-            }
-        });
-    });
-
-    // Initial load
-    loadFeatures();
-});
-</script>
+        </div>
+    </div>
+    {% endif %}
+</div>
 {% endblock %}
