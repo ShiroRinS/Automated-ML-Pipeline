@@ -361,7 +361,9 @@ function getColumnStatusInfo(col) {
 }
 
 function loadColumns(columns) {
-    var html = '';
+    // Clear existing items
+    $('#columnList').empty();
+    
     columns.forEach(function(col) {
         const status = getColumnStatusInfo(col);
         const cleanedBadge = col.cleaning_applied ? 
@@ -369,25 +371,34 @@ function loadColumns(columns) {
         const missingBadge = col.missing_pct > 0 ? 
             '<span class="badge bg-danger">Missing: ' + col.missing_pct + '%</span>' : '';
 
-        html += '<a href="#" class="list-group-item list-group-item-action column-item" data-column="' + col.name + '">' +
-            '<div class="d-flex w-100 justify-content-between align-items-center">' +
-            '<div>' +
-            '<h6 class="mb-1">' +
-            '<i class="fas fa-' + status.icon + ' ' + status.statusClass + ' me-2" data-bs-toggle="tooltip" title="' + status.message + '"></i>' +
-            col.name +
-            '</h6>' +
-            '<div class="small">' +
-            '<span class="badge bg-secondary me-2">' + col.type + '</span>' +
-            missingBadge +
-            '</div>' +
-            '</div>' +
-            '<div class="text-end">' +
-            cleanedBadge +
-            '</div>' +
-            '</div>' +
-            '</a>';
+        // Build HTML parts separately
+        const iconHTML = '<i class="fas fa-' + status.icon + ' ' + status.statusClass + ' me-2" data-bs-toggle="tooltip" title="' + status.message + '"></i>';
+        const badgeHTML = '<span class="badge bg-secondary me-2">' + col.type + '</span>';
+        
+        // Construct final HTML
+        const itemHTML = [
+            '<a href="#" class="list-group-item list-group-item-action column-item" data-column="' + col.name + '">',
+            '  <div class="d-flex w-100 justify-content-between align-items-center">',
+            '    <div>',
+            '      <h6 class="mb-1">',
+            '        ' + iconHTML,
+            '        ' + col.name,
+            '      </h6>',
+            '      <div class="small">',
+            '        ' + badgeHTML,
+            '        ' + missingBadge,
+            '      </div>',
+            '    </div>',
+            '    <div class="text-end">',
+            '      ' + cleanedBadge,
+            '    </div>',
+            '  </div>',
+            '</a>'
+        ].join('\n');
+
+        // Append to list
+        $('#columnList').append(itemHTML);
     });
-    $('#columnList').html(html);
     
     // Initialize tooltips
     $('[data-bs-toggle="tooltip"]').tooltip();
