@@ -287,20 +287,20 @@ $(document).ready(function() {
         var html = '';
         columns.forEach(function(col) {
             if (col.missing_pct > 50) {
-                html += `
+                html += '
                     <div class="suggestion-item">
-                        <h6>${col.name} - ${col.type} (Missing: ${col.missing_pct}%)</h6>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Remove column">Remove Column</button>
+                        <h6>' + col.name + ' - ' + col.type + ' (Missing: ' + col.missing_pct + '%)</h6>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Remove column">Remove Column</button>
                     </div>
-                `;
+                ';
             } else if (col.type === 'int64' || col.type === 'float64') {
-                html += `
+                html += '
                     <div class="suggestion-item">
-                        <h6>${col.name} - ${col.type}</h6>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Fill missing with mean">Fill with Mean</button>
-                        <button class="btn btn-info btn-sm apply-suggestion" data-column="${col.name}" data-method="Fill missing with median">Fill with Median</button>
+                        <h6>' + col.name + ' - ' + col.type + '</h6>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with mean">Fill with Mean</button>
+                        <button class="btn btn-info btn-sm apply-suggestion" data-column="' + col.name + '" data-method="Fill missing with median">Fill with Median</button>
                     </div>
-                `;
+                ';
             }
         });
         $('#suggestionList').html(html);
@@ -403,11 +403,11 @@ function loadCleaningOptions(column) {
     $.get('/api/cleaning-options/' + column, function(response) {
         var html = '';
         response.options.forEach(function(option) {
-            html += `
-                <button class="btn btn-outline-primary mb-2 w-100 clean-option" data-method="${option}">
-                    ${option}
+            html += '
+                <button class="btn btn-outline-primary mb-2 w-100 clean-option" data-method="' + option + '">
+                    ' + option + '
                 </button>
-            `;
+            ';
         });
         $('#cleaningOptions').html(html);
     });
@@ -444,19 +444,19 @@ function updatePreview(preview) {
 function updateHistory(history) {
     var html = '';
     history.forEach(function(item) {
-        html += `
+        html += '
             <tr>
-                <td>${item.timestamp}</td>
-                <td>${item.column}</td>
-                <td>${item.method}</td>
-                <td>${item.result_message}</td>
+                <td>' + item.timestamp + '</td>
+                <td>' + item.column + '</td>
+                <td>' + item.method + '</td>
+                <td>' + item.result_message + '</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-danger" onclick="undoTo('${item.id}')">
+                    <button class="btn btn-sm btn-outline-danger" onclick="undoTo(\'' + item.id + '\')">
                         Undo to here
                     </button>
                 </td>
             </tr>
-        `;
+        ';
     });
     $('#historyTable tbody').html(html);
 }
