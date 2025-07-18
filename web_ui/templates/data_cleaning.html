@@ -222,14 +222,36 @@ $(document).ready(function() {
         });
     });
 
-    // Show warnings for unencoded categorical columns
+    // Show warnings for columns that might need cleaning
     function showCategoricalWarnings(response) {
         if (!response || !response.columns) return;
 
         var warningsHtml = '';
         var hasWarnings = false;
+        
         response.columns.forEach(function(col) {
-            if (col.type === 'object' && col.needs_encoding) {
+            // Check for missing values
+            if (col.missing_pct > 0 && !col.missing_handled) {
+                hasWarnings = true;
+                warningsHtml += '<div class="alert alert-danger mb-2" role="alert">' +
+                    '<i class="fas fa-exclamation-circle me-2"></i>' +
+                    '<strong>Warning:</strong> The column "' + col.name + '" has ' + col.missing_pct.toFixed(1) + '% missing values.' +
+                    '<div class="mt-2">';
+                
+                if (col.type === 'object') {
+                    warningsHtml += '<button class="btn btn-sm btn-danger" onclick="applyCleaning(\'' + col.name + '\', \'Fill missing with mode\')"><i class="fas fa-fill me-1"></i> Fill with Mode</button>' +
+                        '<button class="btn btn-sm btn-danger ms-2" onclick="applyCleaning(\'' + col.name + '\', \'Fill missing with "Unknown"\')"><i class="fas fa-question-circle me-1"></i> Fill with "Unknown"</button>';
+                } else {
+                    warningsHtml += '<button class="btn btn-sm btn-danger" onclick="applyCleaning(\'' + col.name + '\', \'Fill missing with mean\')"><i class="fas fa-calculator me-1"></i> Fill with Mean</button>' +
+                        '<button class="btn btn-sm btn-danger ms-2" onclick="applyCleaning(\'' + col.name + '\', \'Fill missing with median\')"><i class="fas fa-sort-numeric-down me-1"></i> Fill with Median</button>';
+                }
+                
+                warningsHtml += '<button class="btn btn-sm btn-outline-danger ms-2" onclick="applyCleaning(\'' + col.name + '\', \'Remove rows with missing values\')"><i class="fas fa-trash me-1"></i> Remove Rows</button>' +
+                    '</div></div>';
+            }
+
+            // Check for encoding needs
+            if (col.type === 'object' && col.needs_encoding && !col.is_encoded) {
                 hasWarnings = true;
                 warningsHtml += '<div class="alert alert-warning mb-2" role="alert">' +
                     '<i class="fas fa-exclamation-triangle me-2"></i>' +
@@ -237,16 +259,17 @@ $(document).ready(function() {
                     '<div class="mt-2">' +
                     '<button class="btn btn-sm btn-warning" onclick="applyCleaning(\'' + col.name + '\', \'Encode categorical (Label)\')"><i class="fas fa-magic me-1"></i> Apply Label Encoding</button>' +
                     '<button class="btn btn-sm btn-warning ms-2" onclick="applyCleaning(\'' + col.name + '\', \'Encode categorical (One-hot)\')"><i class="fas fa-table me-1"></i> Apply One-hot Encoding</button>' +
-                    '</div>' +
-                    '</div>';
+                    '</div></div>';
             }
         });
-
+        
         if (hasWarnings) {
             warningsHtml = '<div class="mb-3">' +
-                '<h6><i class="fas fa-exclamation-circle"></i> Categorical Columns Need Encoding</h6>' +
-                '<p class="text-muted small">These columns must be encoded before they can be used for training.</p>' +
+                '<h6><i class="fas fa-exclamation-circle"></i> Data Quality Issues Found</h6>' +
+                '<p class="text-muted small">Please address the following issues before proceeding to model training:</p>' +
                 '</div>' + warningsHtml;
+        } else {
+            warningsHtml = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i> All columns are ready for training!</div>';
         }
 
         $('#categoricalWarnings').html(warningsHtml);
@@ -270,7 +293,43 @@ $(document).ready(function() {
         var method = $(this).data('method');
         var params = {}; // Add parameters if needed
         
-        applyCleaning(column, method, params);
+        // Update UI to show processing
+        $(this).prop('disabled', true);
+        $(this).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+        
+        applyCleaning(column, method, params).then(function() {
+            // Re-enable button and restore text
+            $(this).prop('disabled', false);
+            $(this).html(method);
+            
+            // Update column status
+            if (currentData && currentData.columns) {
+                var columnData = currentData.columns.find(c => c.name === column);
+                if (columnData) {
+                    // Update cleaning status
+                    columnData.cleaning_applied = true;
+                    
+                    // Update encoding status if applicable
+                    if (method.includes('Encode categorical')) {
+                        columnData.needs_encoding = false;
+                        columnData.is_encoded = true;
+                    }
+                    
+                    // Update missing values status if applicable
+                    if (method.includes('Fill missing') || method.includes('Remove rows')) {
+                        columnData.missing_handled = true;
+                    }
+                    
+                    // Refresh warnings
+                    showCategoricalWarnings(currentData);
+                }
+            }
+        }.bind(this)).catch(function(error) {
+            // Re-enable button and restore text on error
+            $(this).prop('disabled', false);
+            $(this).html(method);
+            alert('Error applying cleaning: ' + error);
+        }.bind(this));
     });
 
     // Load suggestions dynamically
@@ -407,26 +466,29 @@ function loadCleaningOptions(column) {
 }
 
 function applyCleaning(column, method, params) {
-    $.ajax({
-        url: '/api/apply-cleaning',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-            column: column,
-            method: method,
-            params: params
-        }),
-        success: function(response) {
-            if (response.success) {
-                updatePreview(response.preview);
-                updateHistory(response.history);
-            } else {
-                alert('Error applying cleaning: ' + response.error);
+    return new Promise((resolve, reject) => {
+        $.ajax({
+            url: '/api/apply-cleaning',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                column: column,
+                method: method,
+                params: params
+            }),
+            success: function(response) {
+                if (response.success) {
+                    updatePreview(response.preview);
+                    updateHistory(response.history);
+                    resolve(response);
+                } else {
+                    reject(response.error);
+                }
+            },
+            error: function(xhr, status, error) {
+                reject(error);
             }
-        },
-        error: function() {
-            alert('Error applying cleaning');
-        }
+        });
     });
 }
 
