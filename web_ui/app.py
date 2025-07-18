@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 import glob
 import sys
+import numpy as np
 
 # Add the project root to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -52,8 +53,13 @@ async def index():
 async def clean_data():
     """Data cleaning page"""
     try:
+        print("Debug: Entering the /clean-data endpoint.")
+        # Load and analyze any data specific to cleaning if needed
+        # For example, loading latest data'
+        print("Debug: Attempting to render data_cleaning.html template.")
         return await render_template('data_cleaning.html')
     except Exception as e:
+        print(f"Error in clean_data: {str(e)}")
         return await render_template('error.html', error=str(e))
 
 @app.route('/train')
@@ -213,24 +219,31 @@ async def upload_data():
             columns = []
             for col_info in analysis['columns']:
                 encoded_check = col_info['name'] in analysis.get('encoded_columns', [])
+                # Convert numpy types to Python native types
+                missing_pct = float(col_info['missing_pct']) if isinstance(col_info['missing_pct'], (np.float32, np.float64)) else col_info['missing_pct']
+                
                 columns.append({
-                    'name': col_info['name'],
-                    'type': col_info['type'],
-                    'missing_pct': col_info['missing_pct'],
-                    'needs_encoding': col_info['type'] == 'object' and not encoded_check,
-                    'missing_handled': col_info['missing_pct'] <= 0 or 'Remove rows with missing values' in analysis.get('cleaning_actions', {}).get(col_info['name'], []),
-                    'is_encoded': encoded_check
+                    'name': str(col_info['name']),
+                    'type': str(col_info['type']),
+                    'missing_pct': missing_pct,
+                    'needs_encoding': bool(col_info['type'] == 'object' and not encoded_check),
+                    'missing_handled': bool(missing_pct <= 0 or 'Remove rows with missing values' in analysis.get('cleaning_actions', {}).get(col_info['name'], [])),
+                    'is_encoded': bool(encoded_check)
                 })
+            
+            # Convert numpy values to Python native types
+            analysis_data = {
+                'total_rows': int(analysis['total_rows']),
+                'total_columns': int(analysis['total_columns']),
+                'quality_score': float(analysis['quality_score']),
+                'total_missing': int(sum(col['missing_count'] for col in analysis['columns'])),
+                'data_types': {str(col['name']): str(col['type']) for col in analysis['columns']},
+                'missing_stats': {str(col['name']): {'percentage': float(col['missing_pct'])} for col in analysis['columns']}
+            }
             
             return jsonify({
                 'success': True,
-                'analysis': {
-                    'total_rows': analysis['total_rows'],
-                    'total_columns': analysis['total_columns'],
-                    'quality_score': analysis['quality_score'],
-                    'data_types': {col['name']: col['type'] for col in analysis['columns']},
-                    'missing_stats': {col['name']: {'percentage': col['missing_pct']} for col in analysis['columns']}
-                },
+                'analysis': analysis_data,
                 'columns': columns
             })
         except Exception as e:
